@@ -1,18 +1,18 @@
 // Web validation demo for the push-up-rpg core logic.
 //
 // This is NOT the shipping app. It reuses the app's REAL, unit-tested pure-TS
-// logic (RepDetector, geometry, config) but swaps two platform pieces so it can
-// run in a desktop browser against the computer's webcam:
+// logic (RepDetector, config) but swaps two platform pieces so it can run in a
+// desktop browser against the computer's webcam:
 //   - keypoint source: TensorFlow.js MoveNet (instead of the native tflite model)
 //   - rendering:        an HTML <canvas> overlay (instead of react-native-skia)
 //
 // The point is to see the pose tracking + rep counting work on your computer
-// camera without the Android toolchain.
+// camera without the Android toolchain, and to expose the detector's live
+// signals so thresholds in ../app/src/pose/config.ts can be calibrated.
 
 import {RepDetector, DetectorEvent} from '../../app/src/pose/RepDetector';
 import {DEFAULT_CONFIG} from '../../app/src/pose/config';
 import {KP, Pose} from '../../app/src/pose/types';
-import {angleDeg} from '../../app/src/pose/geometry';
 
 // tf + poseDetection are loaded as globals via <script> tags in index.html.
 declare const tf: any;
@@ -26,9 +26,10 @@ const hintEl = document.getElementById('hint')!;
 const debugEl = document.getElementById('debug')!;
 const statusEl = document.getElementById('status')!;
 
-// MoveNet returns the 17 keypoints in the same order as our KP map (indices
-// 0..10 are nose..rightWrist), so a direct slice maps cleanly onto our Pose.
-const UPPER_BODY_POINTS = 11;
+// MoveNet returns the 17 keypoints in the same order as our KP map, so a direct
+// copy maps cleanly onto our Pose (the detector needs hips/knees for the plank
+// gate + descent signal, so we pass all 17).
+const KEYPOINT_COUNT = 17;
 const MIN_SCORE = 0.3;
 const EDGES: Array<[number, number]> = [
   [KP.leftShoulder, KP.rightShoulder],
@@ -38,6 +39,13 @@ const EDGES: Array<[number, number]> = [
   [KP.rightElbow, KP.rightWrist],
   [KP.nose, KP.leftShoulder],
   [KP.nose, KP.rightShoulder],
+  [KP.leftShoulder, KP.leftHip],
+  [KP.rightShoulder, KP.rightHip],
+  [KP.leftHip, KP.rightHip],
+  [KP.leftHip, KP.leftKnee],
+  [KP.leftKnee, KP.leftAnkle],
+  [KP.rightHip, KP.rightKnee],
+  [KP.rightKnee, KP.rightAnkle],
 ];
 
 const detectorLogic = new RepDetector(DEFAULT_CONFIG);
@@ -78,26 +86,6 @@ function applyEvents(events: DetectorEvent[]) {
   }
 }
 
-// Debug read-out of the current elbow angle, computed with the SAME geometry
-// the detector uses — so you can watch the pipeline react even before a full rep.
-function meanElbowAngleForDebug(pose: Pose): number | null {
-  const arms = [
-    {s: KP.leftShoulder, e: KP.leftElbow, w: KP.leftWrist},
-    {s: KP.rightShoulder, e: KP.rightElbow, w: KP.rightWrist},
-  ];
-  const angles: number[] = [];
-  for (const a of arms) {
-    const s = pose[a.s];
-    const e = pose[a.e];
-    const w = pose[a.w];
-    if (s.score < MIN_SCORE || e.score < MIN_SCORE || w.score < MIN_SCORE) continue;
-    if (w.y <= s.y) continue; // wrist must be below shoulder (image y grows down)
-    angles.push(angleDeg(s, e, w));
-  }
-  if (angles.length === 0) return null;
-  return angles.reduce((sum, v) => sum + v, 0) / angles.length;
-}
-
 function draw(pose: Pose | null) {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -107,6 +95,7 @@ function draw(pose: Pose | null) {
   ctx.lineWidth = Math.max(2, canvas.width * 0.008);
   ctx.strokeStyle = '#FFFFFF';
   for (const [a, b] of EDGES) {
+    if (!pose[a] || !pose[b]) continue;
     if (pose[a].score < MIN_SCORE || pose[b].score < MIN_SCORE) continue;
     ctx.beginPath();
     ctx.moveTo(pose[a].x, pose[a].y);
@@ -115,12 +104,16 @@ function draw(pose: Pose | null) {
   }
   ctx.fillStyle = '#F5A623';
   const r = Math.max(3, canvas.width * 0.012);
-  for (let i = 0; i < UPPER_BODY_POINTS; i++) {
-    if (pose[i].score < MIN_SCORE) continue;
+  for (let i = 0; i < KEYPOINT_COUNT; i++) {
+    if (!pose[i] || pose[i].score < MIN_SCORE) continue;
     ctx.beginPath();
     ctx.arc(pose[i].x, pose[i].y, r, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+function fmt(n: number | null, digits = 0, suffix = ''): string {
+  return n == null ? '—' : n.toFixed(digits) + suffix;
 }
 
 async function main() {
@@ -147,27 +140,26 @@ async function main() {
     if (poses && poses[0]) {
       const kps = poses[0].keypoints;
       pose = [];
-      for (let i = 0; i < UPPER_BODY_POINTS; i++) {
+      for (let i = 0; i < KEYPOINT_COUNT; i++) {
         pose.push({x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0});
       }
-      const events = detectorLogic.process(pose, performance.now());
-      applyEvents(events);
+      applyEvents(detectorLogic.process(pose, performance.now()));
     }
     draw(pose);
 
     counterEl.textContent = String(reps);
     hintEl.style.display = inPosition ? 'none' : 'block';
-    const angle = pose ? meanElbowAngleForDebug(pose) : null;
+
+    // Live detector signals — use these to calibrate config.ts thresholds.
+    const dbg = detectorLogic.debug;
     debugEl.textContent =
-      'угол локтя: ' +
-      (angle == null ? '—' : angle.toFixed(0) + '°') +
-      '   |   в позиции: ' +
-      (inPosition ? 'да' : 'нет') +
-      '   |   пороги: сгиб<' +
-      DEFAULT_CONFIG.elbowFlexedDeg +
-      '° разгиб>' +
-      DEFAULT_CONFIG.elbowExtendedDeg +
-      '°';
+      'гейт: ' + dbg.gateMode +
+      '  | в позиции: ' + (dbg.inPosition ? 'да' : 'нет') +
+      '  | фаза: ' + dbg.phase +
+      '  | корпус: ' + fmt(dbg.torsoAngle, 0, '°') +
+      '  | проседание: ' + fmt(dbg.descent, 2) +
+      ' (порог ' + DEFAULT_CONFIG.descentDownFrac + ')' +
+      '  | локоть: ' + fmt(dbg.elbowAngle, 0, '°');
 
     requestAnimationFrame(loop);
   }

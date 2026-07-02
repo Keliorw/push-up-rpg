@@ -3,12 +3,36 @@ export interface DetectorConfig {
   minKeypointScore: number;
   /** Сколько мс поза должна стабильно держаться до positionAcquired. */
   positionHoldMs: number;
+  /** Минимум мс между засчитанными повторами (защита от дребезга). */
+  minRepDurationMs: number;
+
+  // --- Гейт «горизонтальное положение» (планка) ---
+  /**
+   * Минимальный угол корпуса (плечо–бедро–колено), при котором тело считается
+   * прямым (планка). Сидя на стуле бедро согнуто (~90–120°) и гейт не проходит.
+   * Применяется, только когда видны бёдра и колени; иначе — запасной гейт.
+   */
+  plankBodyMinAngleDeg: number;
+
+  // --- Сигнал повтора №1: вертикальное проседание корпуса (основной) ---
+  /**
+   * Насколько плечи должны опуститься относительно «верхней» позиции, в долях
+   * длины торса (плечо–бедро), чтобы засчитать фазу «вниз». Нормировка по длине
+   * торса делает сигнал независимым от расстояния до камеры.
+   */
+  descentDownFrac: number;
+  /** Порог возврата вверх (< downFrac — гистерезис). */
+  descentUpFrac: number;
+  /** EMA-сглаживание сигнала проседания (1 = без сглаживания). */
+  descentSmoothing: number;
+  /** Скорость медленного «сползания» базовой (верхней) линии за корпусом. */
+  baselineRelaxAlpha: number;
+
+  // --- Сигнал повтора №2: угол локтя (запасной, для вида сбоку/сидя) ---
   /** Угол локтя, при котором руки считаются выпрямленными. */
   elbowExtendedDeg: number;
   /** Угол локтя, при котором руки считаются согнутыми. */
   elbowFlexedDeg: number;
-  /** Минимум мс между засчитанными повторами (защита от дребезга). */
-  minRepDurationMs: number;
   /** EMA-коэффициент нового замера угла (1 = без сглаживания). */
   angleSmoothing: number;
 }
@@ -16,8 +40,16 @@ export interface DetectorConfig {
 export const DEFAULT_CONFIG: DetectorConfig = {
   minKeypointScore: 0.3,
   positionHoldMs: 1000,
+  minRepDurationMs: 700,
+
+  plankBodyMinAngleDeg: 140,
+
+  descentDownFrac: 0.14,
+  descentUpFrac: 0.05,
+  descentSmoothing: 0.5,
+  baselineRelaxAlpha: 0.01,
+
   elbowExtendedDeg: 155,
   elbowFlexedDeg: 95,
-  minRepDurationMs: 700,
   angleSmoothing: 0.4,
 };

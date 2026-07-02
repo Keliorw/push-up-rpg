@@ -26,8 +26,12 @@ const MODEL_PATH = require('../assets/models/movenet_lightning_int8.tflite');
 
 /** MoveNet Lightning input: 192x192 RGB (uint8), see model.d.ts inspection in task-7-report.md. */
 const MODEL_INPUT_SIZE = 192;
-/** Only the upper-body keypoints (0..10) are meaningful for push-up counting. */
-const UPPER_BODY_KEYPOINT_COUNT = 11;
+/**
+ * All 17 MoveNet keypoints — the detector needs hips/knees (11..16) for the
+ * "horizontal body" (plank) gate and the vertical-descent rep signal, not just
+ * the upper body.
+ */
+const KEYPOINT_COUNT = 17;
 /** Throttle inference — frame.toArrayBuffer()-equivalent (getPixelBuffer) is the expensive step. */
 const TARGET_FPS = 15;
 const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
@@ -49,7 +53,7 @@ const MIRROR_OVERLAY_X = true;
 const EXIT_BUTTON_TOP = 24;
 const HUD_PADDING_TOP = 64;
 
-/** Skeleton edges: shoulders, left arm, right arm, head→shoulders. */
+/** Skeleton edges: arms, head→shoulders, torso, and legs. */
 const SKELETON_EDGES: ReadonlyArray<readonly [number, number]> = [
   [KP.leftShoulder, KP.rightShoulder],
   [KP.leftShoulder, KP.leftElbow],
@@ -58,6 +62,14 @@ const SKELETON_EDGES: ReadonlyArray<readonly [number, number]> = [
   [KP.rightElbow, KP.rightWrist],
   [KP.nose, KP.leftShoulder],
   [KP.nose, KP.rightShoulder],
+  // torso + legs (for the plank / horizontal-position check)
+  [KP.leftShoulder, KP.leftHip],
+  [KP.rightShoulder, KP.rightHip],
+  [KP.leftHip, KP.rightHip],
+  [KP.leftHip, KP.leftKnee],
+  [KP.leftKnee, KP.leftAnkle],
+  [KP.rightHip, KP.rightKnee],
+  [KP.rightKnee, KP.rightAnkle],
 ];
 
 /**
@@ -113,7 +125,7 @@ function downsampleFrameToModelInput(frame: Frame): Uint8Array {
 function moveNetOutputToPose(kp: Float32Array): Pose {
   'worklet';
   const pose: Pose = [];
-  for (let i = 0; i < UPPER_BODY_KEYPOINT_COUNT; i++) {
+  for (let i = 0; i < KEYPOINT_COUNT; i++) {
     pose.push({
       y: kp[i * 3],
       x: kp[i * 3 + 1],

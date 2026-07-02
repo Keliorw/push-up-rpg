@@ -2,9 +2,14 @@
 var DEFAULT_CONFIG = {
   minKeypointScore: 0.3,
   positionHoldMs: 1e3,
+  minRepDurationMs: 700,
+  plankBodyMinAngleDeg: 140,
+  descentDownFrac: 0.14,
+  descentUpFrac: 0.05,
+  descentSmoothing: 0.5,
+  baselineRelaxAlpha: 0.01,
   elbowExtendedDeg: 155,
   elbowFlexedDeg: 95,
-  minRepDurationMs: 700,
   angleSmoothing: 0.4
 };
 
@@ -34,7 +39,13 @@ var KP = {
   leftElbow: 7,
   rightElbow: 8,
   leftWrist: 9,
-  rightWrist: 10
+  rightWrist: 10,
+  leftHip: 11,
+  rightHip: 12,
+  leftKnee: 13,
+  rightKnee: 14,
+  leftAnkle: 15,
+  rightAnkle: 16
 };
 
 // app/src/pose/RepDetector.ts
@@ -50,33 +61,52 @@ var RepDetector = class {
   state = "noPosition";
   holdStartMs = 0;
   lastRepMs = Number.NEGATIVE_INFINITY;
-  smoothedAngle = null;
+  smoothedElbow = null;
+  smoothedDescent = 0;
+  baselineTopY = null;
+  debug = {
+    inPosition: false,
+    gateMode: "none",
+    torsoAngle: null,
+    elbowAngle: null,
+    descent: null,
+    phase: "up"
+  };
   process(pose, tMs) {
-    const angle = this.meanElbowAngle(pose);
-    if (angle === null) {
+    const gate = this.evaluateGate(pose);
+    this.debug.gateMode = gate.mode;
+    this.debug.torsoAngle = gate.torsoAngle;
+    if (!gate.inPosition) {
       return this.dropPosition();
     }
-    this.smoothedAngle = this.smoothedAngle === null ? angle : this.cfg.angleSmoothing * angle + (1 - this.cfg.angleSmoothing) * this.smoothedAngle;
-    const a = this.smoothedAngle;
+    const elbow = this.updateElbow(pose);
+    const descent = this.updateDescent(pose);
+    this.debug.elbowAngle = elbow;
+    this.debug.descent = descent;
     switch (this.state) {
       case "noPosition":
         this.state = "holding";
         this.holdStartMs = tMs;
+        this.debug.inPosition = false;
         return [];
       case "holding":
         if (tMs - this.holdStartMs >= this.cfg.positionHoldMs) {
           this.state = "up";
+          this.debug.inPosition = true;
+          this.debug.phase = "up";
           return ["positionAcquired"];
         }
         return [];
       case "up":
-        if (a <= this.cfg.elbowFlexedDeg) {
+        if (this.isDown(elbow, descent)) {
           this.state = "down";
+          this.debug.phase = "down";
         }
         return [];
       case "down":
-        if (a >= this.cfg.elbowExtendedDeg) {
+        if (this.isUp(elbow, descent)) {
           this.state = "up";
+          this.debug.phase = "up";
           if (tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
             this.lastRepMs = tMs;
             return ["repCounted"];
@@ -85,39 +115,118 @@ var RepDetector = class {
         return [];
     }
   }
+  isDown(elbow, descent) {
+    const elbowDown = elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
+    const descentDown = descent !== null && descent >= this.cfg.descentDownFrac;
+    return elbowDown || descentDown;
+  }
+  isUp(elbow, descent) {
+    const elbowUp = elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
+    const descentUp = descent !== null && descent <= this.cfg.descentUpFrac;
+    return elbowUp || descentUp;
+  }
   dropPosition() {
     const wasAcquired = this.state === "up" || this.state === "down";
     this.state = "noPosition";
-    this.smoothedAngle = null;
+    this.smoothedElbow = null;
+    this.smoothedDescent = 0;
+    this.baselineTopY = null;
+    this.debug.inPosition = false;
+    this.debug.phase = "up";
+    this.debug.elbowAngle = null;
+    this.debug.descent = null;
     return wasAcquired ? ["positionLost"] : [];
   }
-  /**
-   * Средний угол в локтях по рукам, у которых плечо, локоть и запястье
-   * видны (score выше порога) и запястье ниже плеча в кадре.
-   * null — пользователь не в положении для отжиманий.
-   */
-  meanElbowAngle(pose) {
-    const min = this.cfg.minKeypointScore;
-    const angles = [];
-    for (const arm of ARMS) {
-      const s = pose[arm.shoulder];
-      const e = pose[arm.elbow];
-      const w = pose[arm.wrist];
-      if (!s || !e || !w) {
-        continue;
-      }
-      if (s.score < min || e.score < min || w.score < min) {
-        continue;
-      }
-      if (w.y <= s.y) {
-        continue;
-      }
-      angles.push(angleDeg(s, e, w));
-    }
-    if (angles.length === 0) {
+  vis(pose, idx) {
+    const p = pose[idx];
+    if (!p || p.score < this.cfg.minKeypointScore) {
       return null;
     }
-    return angles.reduce((sum, v) => sum + v, 0) / angles.length;
+    return p;
+  }
+  /** Среднее видимых точек из списка; null если ни одной. */
+  mid(pose, ...idxs) {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (const i of idxs) {
+      const p = this.vis(pose, i);
+      if (p) {
+        sx += p.x;
+        sy += p.y;
+        n++;
+      }
+    }
+    return n === 0 ? null : { x: sx / n, y: sy / n };
+  }
+  evaluateGate(pose) {
+    const shoulder = this.mid(pose, KP.leftShoulder, KP.rightShoulder);
+    const hip = this.mid(pose, KP.leftHip, KP.rightHip);
+    const knee = this.mid(pose, KP.leftKnee, KP.rightKnee);
+    if (shoulder && hip && knee) {
+      const torsoAngle = angleDeg(shoulder, hip, knee);
+      return {
+        inPosition: torsoAngle >= this.cfg.plankBodyMinAngleDeg,
+        mode: "plank",
+        torsoAngle
+      };
+    }
+    if (shoulder) {
+      for (const arm of ARMS) {
+        const s = this.vis(pose, arm.shoulder);
+        const e = this.vis(pose, arm.elbow);
+        const w = this.vis(pose, arm.wrist);
+        if (s && e && w && w.y > s.y) {
+          return { inPosition: true, mode: "fallback", torsoAngle: null };
+        }
+      }
+    }
+    return { inPosition: false, mode: "none", torsoAngle: null };
+  }
+  /** Сглаженный средний угол локтя по видимым рукам; null если рук нет. */
+  updateElbow(pose) {
+    const angles = [];
+    for (const arm of ARMS) {
+      const s = this.vis(pose, arm.shoulder);
+      const e = this.vis(pose, arm.elbow);
+      const w = this.vis(pose, arm.wrist);
+      if (s && e && w) {
+        angles.push(angleDeg(s, e, w));
+      }
+    }
+    if (angles.length === 0) {
+      this.smoothedElbow = null;
+      return null;
+    }
+    const raw = angles.reduce((sum, v) => sum + v, 0) / angles.length;
+    this.smoothedElbow = this.smoothedElbow === null ? raw : this.cfg.angleSmoothing * raw + (1 - this.cfg.angleSmoothing) * this.smoothedElbow;
+    return this.smoothedElbow;
+  }
+  /**
+   * Проседание корпуса: насколько плечи опустились относительно «верхней»
+   * (наивысшей) позиции, нормировано на длину торса (плечо–бедро). Возвращает
+   * null, если не видно плеч+бёдер. Базовая линия следует за наивысшей точкой
+   * и медленно сползает, чтобы адаптироваться к сдвигам позы.
+   */
+  updateDescent(pose) {
+    const shoulder = this.mid(pose, KP.leftShoulder, KP.rightShoulder);
+    const hip = this.mid(pose, KP.leftHip, KP.rightHip);
+    if (!shoulder || !hip) {
+      return null;
+    }
+    const torsoLen = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+    if (torsoLen < 1e-6) {
+      return null;
+    }
+    const y = shoulder.y;
+    if (this.baselineTopY === null || y < this.baselineTopY) {
+      this.baselineTopY = y;
+    } else {
+      this.baselineTopY += (y - this.baselineTopY) * this.cfg.baselineRelaxAlpha;
+    }
+    const raw = Math.max(0, (y - this.baselineTopY) / torsoLen);
+    this.smoothedDescent = this.cfg.descentSmoothing * raw + (1 - this.cfg.descentSmoothing) * this.smoothedDescent;
+    return this.smoothedDescent;
   }
 };
 
@@ -129,7 +238,7 @@ var counterEl = document.getElementById("counter");
 var hintEl = document.getElementById("hint");
 var debugEl = document.getElementById("debug");
 var statusEl = document.getElementById("status");
-var UPPER_BODY_POINTS = 11;
+var KEYPOINT_COUNT = 17;
 var MIN_SCORE = 0.3;
 var EDGES = [
   [KP.leftShoulder, KP.rightShoulder],
@@ -138,7 +247,14 @@ var EDGES = [
   [KP.rightShoulder, KP.rightElbow],
   [KP.rightElbow, KP.rightWrist],
   [KP.nose, KP.leftShoulder],
-  [KP.nose, KP.rightShoulder]
+  [KP.nose, KP.rightShoulder],
+  [KP.leftShoulder, KP.leftHip],
+  [KP.rightShoulder, KP.rightHip],
+  [KP.leftHip, KP.rightHip],
+  [KP.leftHip, KP.leftKnee],
+  [KP.leftKnee, KP.leftAnkle],
+  [KP.rightHip, KP.rightKnee],
+  [KP.rightKnee, KP.rightAnkle]
 ];
 var detectorLogic = new RepDetector(DEFAULT_CONFIG);
 var reps = 0;
@@ -172,23 +288,6 @@ function applyEvents(events) {
     }
   }
 }
-function meanElbowAngleForDebug(pose) {
-  const arms = [
-    { s: KP.leftShoulder, e: KP.leftElbow, w: KP.leftWrist },
-    { s: KP.rightShoulder, e: KP.rightElbow, w: KP.rightWrist }
-  ];
-  const angles = [];
-  for (const a of arms) {
-    const s = pose[a.s];
-    const e = pose[a.e];
-    const w = pose[a.w];
-    if (s.score < MIN_SCORE || e.score < MIN_SCORE || w.score < MIN_SCORE) continue;
-    if (w.y <= s.y) continue;
-    angles.push(angleDeg(s, e, w));
-  }
-  if (angles.length === 0) return null;
-  return angles.reduce((sum, v) => sum + v, 0) / angles.length;
-}
 function draw(pose) {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -197,6 +296,7 @@ function draw(pose) {
   ctx.lineWidth = Math.max(2, canvas.width * 8e-3);
   ctx.strokeStyle = "#FFFFFF";
   for (const [a, b] of EDGES) {
+    if (!pose[a] || !pose[b]) continue;
     if (pose[a].score < MIN_SCORE || pose[b].score < MIN_SCORE) continue;
     ctx.beginPath();
     ctx.moveTo(pose[a].x, pose[a].y);
@@ -205,12 +305,15 @@ function draw(pose) {
   }
   ctx.fillStyle = "#F5A623";
   const r = Math.max(3, canvas.width * 0.012);
-  for (let i = 0; i < UPPER_BODY_POINTS; i++) {
-    if (pose[i].score < MIN_SCORE) continue;
+  for (let i = 0; i < KEYPOINT_COUNT; i++) {
+    if (!pose[i] || pose[i].score < MIN_SCORE) continue;
     ctx.beginPath();
     ctx.arc(pose[i].x, pose[i].y, r, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+function fmt(n, digits = 0, suffix = "") {
+  return n == null ? "\u2014" : n.toFixed(digits) + suffix;
 }
 async function main() {
   setStatus("\u0417\u0430\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E \u043A\u0430\u043C\u0435\u0440\u0443\u2026");
@@ -234,17 +337,16 @@ async function main() {
     if (poses && poses[0]) {
       const kps = poses[0].keypoints;
       pose = [];
-      for (let i = 0; i < UPPER_BODY_POINTS; i++) {
+      for (let i = 0; i < KEYPOINT_COUNT; i++) {
         pose.push({ x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0 });
       }
-      const events = detectorLogic.process(pose, performance.now());
-      applyEvents(events);
+      applyEvents(detectorLogic.process(pose, performance.now()));
     }
     draw(pose);
     counterEl.textContent = String(reps);
     hintEl.style.display = inPosition ? "none" : "block";
-    const angle = pose ? meanElbowAngleForDebug(pose) : null;
-    debugEl.textContent = "\u0443\u0433\u043E\u043B \u043B\u043E\u043A\u0442\u044F: " + (angle == null ? "\u2014" : angle.toFixed(0) + "\xB0") + "   |   \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: " + (inPosition ? "\u0434\u0430" : "\u043D\u0435\u0442") + "   |   \u043F\u043E\u0440\u043E\u0433\u0438: \u0441\u0433\u0438\u0431<" + DEFAULT_CONFIG.elbowFlexedDeg + "\xB0 \u0440\u0430\u0437\u0433\u0438\u0431>" + DEFAULT_CONFIG.elbowExtendedDeg + "\xB0";
+    const dbg = detectorLogic.debug;
+    debugEl.textContent = "\u0433\u0435\u0439\u0442: " + dbg.gateMode + "  | \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: " + (dbg.inPosition ? "\u0434\u0430" : "\u043D\u0435\u0442") + "  | \u0444\u0430\u0437\u0430: " + dbg.phase + "  | \u043A\u043E\u0440\u043F\u0443\u0441: " + fmt(dbg.torsoAngle, 0, "\xB0") + "  | \u043F\u0440\u043E\u0441\u0435\u0434\u0430\u043D\u0438\u0435: " + fmt(dbg.descent, 2) + " (\u043F\u043E\u0440\u043E\u0433 " + DEFAULT_CONFIG.descentDownFrac + ")  | \u043B\u043E\u043A\u043E\u0442\u044C: " + fmt(dbg.elbowAngle, 0, "\xB0");
     requestAnimationFrame(loop);
   }
   loop();

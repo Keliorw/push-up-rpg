@@ -4,10 +4,10 @@ export interface Keypoint {
   score: number;
 }
 
-/** Массив ключевых точек, индексация по схеме MoveNet (используем 0–10). */
+/** Массив ключевых точек, индексация по схеме MoveNet (17 точек, 0–16). */
 export type Pose = Keypoint[];
 
-/** Индексы ключевых точек MoveNet. */
+/** Индексы ключевых точек MoveNet (все 17). */
 export const KP = {
   nose: 0,
   leftEye: 1,
@@ -20,4 +20,10 @@ export const KP = {
   rightElbow: 8,
   leftWrist: 9,
   rightWrist: 10,
+  leftHip: 11,
+  rightHip: 12,
+  leftKnee: 13,
+  rightKnee: 14,
+  leftAnkle: 15,
+  rightAnkle: 16,
 } as const;
