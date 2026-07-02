@@ -17,47 +17,45 @@
         gap: 12px;
         padding: 16px;
       }
-      h1 { font-size: 18px; font-weight: 800; margin: 4px 0; }
+      h1 { font-size: 18px; font-weight: 800; margin: 4px 0; text-align: center; }
       .note { font-size: 13px; color: #9aa4b2; max-width: 680px; text-align: center; }
-      /* Wrapper is mirrored (selfie view); video + overlay flip together so the
+      #status { font-size: 14px; color: #F5A623; min-height: 18px; }
+
+      /* Relative container so the (un-mirrored) HUD can overlay the (mirrored) stage. */
+      #wrap { position: relative; width: 640px; max-width: 100%; }
+
+      /* Stage is mirrored (selfie view); video + overlay flip together so the
          skeleton stays aligned with the picture. */
-      #stage {
-        position: relative;
-        width: 640px;
-        max-width: 100%;
-        transform: scaleX(-1);
-      }
-      #video, #overlay {
+      #stage { transform: scaleX(-1); line-height: 0; }
+      #video {
         width: 100%;
         display: block;
         border-radius: 12px;
-        background: #000;
+        background: #000; /* only the video has a black backdrop */
       }
-      #overlay { position: absolute; inset: 0; }
-      /* HUD is NOT mirrored — counter as a separate un-flipped layer. */
-      #hud {
-        position: relative;
-        width: 640px;
-        max-width: 100%;
-        margin-top: -640px;
-        height: 640px;
-        pointer-events: none;
+      /* Overlay canvas MUST be transparent, otherwise it hides the video. */
+      #overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
       }
+
+      /* HUD overlays the stage but is NOT mirrored, so text reads correctly. */
+      #hud { position: absolute; inset: 0; pointer-events: none; }
       #counter {
         position: absolute; top: 12px; left: 0; right: 0;
-        text-align: center; font-size: 88px; font-weight: 900; color: #F5A623;
+        text-align: center; font-size: 72px; font-weight: 900; color: #F5A623;
         text-shadow: 0 2px 8px #000;
       }
-      #hint {
-        position: absolute; top: 120px; left: 0; right: 0; text-align: center;
-      }
+      #hint { position: absolute; top: 100px; left: 0; right: 0; text-align: center; }
       #hint span {
         background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 8px; font-size: 16px;
       }
-      #status { font-size: 14px; color: #F5A623; min-height: 18px; }
       #debug {
         font-family: ui-monospace, monospace; font-size: 13px; color: #9aa4b2;
-        background: #0b111f; padding: 8px 12px; border-radius: 8px;
+        background: #0b111f; padding: 8px 12px; border-radius: 8px; text-align: center;
       }
     </style>
   </head>
@@ -69,13 +67,15 @@
       кисти ниже плеч и сгибайте/разгибайте локти (имитация отжимания).
     </p>
     <div id="status">Инициализация…</div>
-    <div id="stage">
-      <video id="video" playsinline muted></video>
-      <canvas id="overlay"></canvas>
-    </div>
-    <div id="hud">
-      <div id="counter">0</div>
-      <div id="hint"><span>Займите упор лёжа</span></div>
+    <div id="wrap">
+      <div id="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="hud">
+        <div id="counter">0</div>
+        <div id="hint"><span>Займите упор лёжа</span></div>
+      </div>
     </div>
     <div id="debug">угол локтя: —</div>
 
