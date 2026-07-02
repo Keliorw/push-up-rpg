@@ -14,6 +14,11 @@ export function useWorkoutSession() {
   }
 
   const onPose = useCallback((pose: Pose) => {
+    // `Date.now()` here is JS-thread receipt time (after the worklet's
+    // `runOnJS` hop), not the frame's own capture/inference timestamp — same
+    // `Date.now()` base as the worklet's FRAME_INTERVAL_MS throttle, so it's
+    // internally consistent; the extra hop latency is acceptable for MVP
+    // timing (positionHoldMs / minRepDurationMs granularity).
     const events = detectorRef.current!.process(pose, Date.now());
     if (events.length === 0) {
       return;

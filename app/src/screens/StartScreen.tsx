@@ -1,9 +1,13 @@
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 
 export function StartScreen({onStart}: {onStart: () => void}) {
+  // `SafeAreaView` pads for the top inset itself (native, no Provider
+  // context needed), keeping the title clear of a notch/status bar without
+  // altering the centered layout or dark background/accent design.
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <Text style={styles.title}>Push-Ups RPG</Text>
       <Pressable
         accessibilityRole="button"
@@ -11,7 +15,7 @@ export function StartScreen({onStart}: {onStart: () => void}) {
         onPress={onStart}>
         <Text style={styles.buttonText}>START</Text>
       </Pressable>
-    </View>
+    </SafeAreaView>
   );
 }
 

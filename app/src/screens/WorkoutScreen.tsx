@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
+  Linking,
   LayoutChangeEvent,
   Pressable,
   StyleSheet,
@@ -16,9 +17,10 @@ import {
 import {useTensorflowModel} from 'react-native-fast-tflite';
 import {runOnJS} from 'react-native-worklets';
 import {useSharedValue} from 'react-native-reanimated';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Canvas, Circle, Line} from '@shopify/react-native-skia';
 import {useWorkoutSession} from '../session/useWorkoutSession';
-import {Keypoint, Pose} from '../pose/types';
+import {Keypoint, KP, Pose} from '../pose/types';
 
 const MODEL_PATH = require('../assets/models/movenet_lightning_int8.tflite');
 
@@ -43,15 +45,19 @@ const MIN_SCORE = 0.3;
  */
 const MIRROR_OVERLAY_X = true;
 
+/** Base (no-inset) offsets for fixed HUD chrome; see `useSafeAreaInsets` usages below. */
+const EXIT_BUTTON_TOP = 24;
+const HUD_PADDING_TOP = 64;
+
 /** Skeleton edges: shoulders, left arm, right arm, head→shoulders. */
 const SKELETON_EDGES: ReadonlyArray<readonly [number, number]> = [
-  [5, 6],
-  [5, 7],
-  [7, 9],
-  [6, 8],
-  [8, 10],
-  [0, 5],
-  [0, 6],
+  [KP.leftShoulder, KP.rightShoulder],
+  [KP.leftShoulder, KP.leftElbow],
+  [KP.leftElbow, KP.leftWrist],
+  [KP.rightShoulder, KP.rightElbow],
+  [KP.rightElbow, KP.rightWrist],
+  [KP.nose, KP.leftShoulder],
+  [KP.nose, KP.rightShoulder],
 ];
 
 /**
@@ -117,6 +123,43 @@ function moveNetOutputToPose(kp: Float32Array): Pose {
   return pose;
 }
 
+/**
+ * MoveNet is fed a squashed (non-square-aspect) 192x192 crop of the frame
+ * (see `downsampleFrameToModelInput`), so its normalized x/y outputs live in
+ * different real-world pixel scales: x is a fraction of `frame.width`, y is a
+ * fraction of `frame.height`, and those two are usually not equal on a phone
+ * sensor. `angleDeg` (used by RepDetector) assumes an isotropic (equal-scale)
+ * coordinate space to compute a true geometric angle — fed the squashed
+ * coords directly, it would compute aspect/device-dependent elbow angles,
+ * and `elbowFlexedDeg`/`elbowExtendedDeg` thresholds tuned on one device's
+ * aspect ratio wouldn't port to another.
+ *
+ * Rescale y into "fractions of frame.width" units (same units as x) via
+ * `yIso = yNorm * (frame.height / frame.width)`:
+ *   xNorm = px / W, yNorm = py / H  =>  yNorm * (H / W) = py / W
+ * Both axes are now expressed as a fraction of W, i.e. equal scale, so
+ * distances/angles derived from these coordinates are aspect-correct and
+ * portable across devices. Since H/W > 0, this only rescales magnitudes —
+ * it doesn't flip sign, so the "wrist below shoulder" (y-ordering) check in
+ * RepDetector.meanElbowAngle is unaffected in direction.
+ *
+ * This isotropic pose is what gets passed to the rep detector (`onPose`);
+ * the overlay keeps using the raw normalized pose from
+ * `moveNetOutputToPose` so the on-screen skeleton isn't distorted. The exact
+ * `elbowFlexedDeg`/`elbowExtendedDeg` values still need on-device tuning,
+ * but this makes them meaningful across aspect ratios/devices.
+ */
+function toIsotropicPose(pose: Pose, frame: Frame): Pose {
+  'worklet';
+  const yScale = frame.height / frame.width;
+  const isoPose: Pose = [];
+  for (let i = 0; i < pose.length; i++) {
+    const point = pose[i];
+    isoPose.push({x: point.x, y: point.y * yScale, score: point.score});
+  }
+  return isoPose;
+}
+
 function toCanvasXY(
   point: Keypoint,
   size: {width: number; height: number},
@@ -126,12 +169,15 @@ function toCanvasXY(
   return {x, y};
 }
 
+// Offsets by the top safe-area inset so the button clears a notch/status bar
+// on every WorkoutScreen branch (camera view, permission/device/model errors).
 function ExitButton({onPress}: {onPress: () => void}) {
+  const insets = useSafeAreaInsets();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Выйти из тренировки"
-      style={styles.exitButton}
+      style={[styles.exitButton, {top: EXIT_BUTTON_TOP + insets.top}]}
       onPress={onPress}>
       <Text style={styles.exitText}>✕</Text>
     </Pressable>
@@ -139,28 +185,37 @@ function ExitButton({onPress}: {onPress: () => void}) {
 }
 
 export function WorkoutScreen({onExit}: {onExit: () => void}) {
-  const {hasPermission, requestPermission} = useCameraPermission();
+  const {hasPermission, requestPermission, canRequestPermission} =
+    useCameraPermission();
   const device = useCameraDevice('front');
   const {reps, inPosition, onPose} = useWorkoutSession();
   const plugin = useTensorflowModel(MODEL_PATH, []);
   const model = plugin.state === 'loaded' ? plugin.model : undefined;
+  const insets = useSafeAreaInsets();
 
   const [overlayPose, setOverlayPose] = useState<Pose>([]);
   const [canvasSize, setCanvasSize] = useState({width: 0, height: 0});
   const lastInferenceAt = useSharedValue(0);
 
   useEffect(() => {
-    if (!hasPermission) {
+    // Only auto-prompt while the OS is still willing to show its native
+    // dialog. Once the user has permanently denied it, `canRequestPermission`
+    // is false and re-calling `requestPermission()` would be a silent no-op —
+    // the permission-denied branch below guides the user to Settings instead.
+    if (!hasPermission && canRequestPermission) {
       requestPermission();
     }
-  }, [hasPermission, requestPermission]);
+  }, [hasPermission, canRequestPermission, requestPermission]);
 
   // Runs on the JS thread (hopped to via runOnJS from the frame processor):
   // feeds the rep counter and updates the Skia overlay's React state.
+  // `overlayPose` is the raw normalized pose (undistorted screen mapping);
+  // `detectorPose` is the aspect-corrected (isotropic) pose — see
+  // `toIsotropicPose` for why the two must differ.
   const handlePoseFromWorklet = useCallback(
-    (pose: Pose) => {
-      onPose(pose);
-      setOverlayPose(pose);
+    (overlayPose: Pose, detectorPose: Pose) => {
+      onPose(detectorPose);
+      setOverlayPose(overlayPose);
     },
     [onPose],
   );
@@ -191,8 +246,9 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
         const outputs = model.runSync([input.buffer as ArrayBuffer]);
         const kp = new Float32Array(outputs[0]);
         const pose = moveNetOutputToPose(kp);
+        const detectorPose = toIsotropicPose(pose, frame);
 
-        runOnJS(handlePoseFromWorklet)(pose);
+        runOnJS(handlePoseFromWorklet)(pose, detectorPose);
       } finally {
         frame.dispose();
       }
@@ -211,17 +267,42 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
   }, []);
 
   if (!hasPermission) {
+    // `canRequestPermission` is false once the OS considers the permission
+    // permanently denied (e.g. user tapped "Don't ask again", or denied it
+    // before on iOS) — at that point `requestPermission()` won't show a
+    // dialog anymore, so we send the user to system Settings instead.
     return (
       <View style={styles.root}>
-        <Text style={styles.message}>
-          Приложению нужен доступ к камере, чтобы считать отжимания.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.permissionButton}
-          onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Разрешить</Text>
-        </Pressable>
+        {canRequestPermission ? (
+          <>
+            <Text style={styles.message}>
+              Приложению нужен доступ к камере, чтобы считать отжимания.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.permissionButton}
+              onPress={requestPermission}>
+              <Text style={styles.permissionButtonText}>Разрешить</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={styles.message}>
+              Доступ к камере отключён в настройках. Разрешите доступ к
+              камере в настройках приложения, чтобы считать отжимания.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.permissionButton}
+              onPress={() => {
+                Linking.openSettings();
+              }}>
+              <Text style={styles.permissionButtonText}>
+                Открыть настройки
+              </Text>
+            </Pressable>
+          </>
+        )}
         <ExitButton onPress={onExit} />
       </View>
     );
@@ -250,11 +331,19 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
 
   return (
     <View style={styles.root}>
+      {/* `resizeMode="cover"` is vision-camera's default; set explicitly
+          because the Skia overlay below maps normalized (0..1) keypoints to
+          canvas pixels with a plain linear scale, which is only pixel-exact
+          against the *content* if the preview isn't letterboxed (i.e. crops
+          to cover rather than adding bars via "contain"). Exact alignment
+          (cropping offsets, aspect mismatches) is still an on-device tuning
+          item. */}
       <Camera
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
         outputs={[frameOutput]}
+        resizeMode="cover"
       />
 
       <View
@@ -299,7 +388,11 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
       </View>
 
       <View
-        style={[StyleSheet.absoluteFill, styles.hudRoot]}
+        style={[
+          StyleSheet.absoluteFill,
+          styles.hudRoot,
+          {paddingTop: HUD_PADDING_TOP + insets.top},
+        ]}
         pointerEvents="none">
         <Text style={styles.counter}>{reps}</Text>
         {!inPosition && (
@@ -341,8 +434,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   hudRoot: {
+    // paddingTop is applied inline as HUD_PADDING_TOP + safe-area inset.
     alignItems: 'center',
-    paddingTop: 64,
   },
   counter: {
     color: '#F5A623',
@@ -365,8 +458,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   exitButton: {
+    // top is applied inline as EXIT_BUTTON_TOP + safe-area inset.
     position: 'absolute',
-    top: 24,
     right: 24,
     width: 44,
     height: 44,
