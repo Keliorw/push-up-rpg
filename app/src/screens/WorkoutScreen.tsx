@@ -222,6 +222,7 @@ export function WorkoutScreen({
 }) {
   const {hasPermission, requestPermission, canRequestPermission} =
     useCameraPermission();
+  const insets = useSafeAreaInsets();
   const device = useCameraDevice('front');
   const plugin = useTensorflowModel(MODEL_PATH, []);
   const model = plugin.state === 'loaded' ? plugin.model : undefined;
@@ -472,16 +473,16 @@ export function WorkoutScreen({
       {monster && (
         <>
           {/* TIME — слева сверху */}
-          <View style={battle.timeBox}>
+          <View style={[battle.timeBox, {top: 12 + insets.top}]}>
             <Text style={battle.timeLbl}>TIME</Text>
             <Text style={battle.time}>{fmtTime(elapsed)}</Text>
           </View>
           {/* Выход — справа сверху */}
-          <Pressable style={battle.exit} onPress={onExit}>
+          <Pressable style={[battle.exit, {top: 12 + insets.top}]} onPress={onExit}>
             <Text style={battle.exitText}>✕</Text>
           </Pressable>
           {/* Карточка монстра — центр сверху */}
-          <View style={battle.card} pointerEvents="none">
+          <View style={[battle.card, {top: 10 + insets.top}]} pointerEvents="none">
             {cardImageSource(monster.cardImage) ? (
               <Image
                 source={cardImageSource(monster.cardImage)!}
@@ -492,7 +493,7 @@ export function WorkoutScreen({
             <Text style={battle.cardName}>{monster.name}</Text>
           </View>
           {/* HP-бар */}
-          <View style={battle.hpWrap} pointerEvents="none">
+          <View style={[battle.hpWrap, {top: 184 + insets.top}]} pointerEvents="none">
             <View
               style={[
                 battle.hpFill,
@@ -504,7 +505,7 @@ export function WorkoutScreen({
             </Text>
           </View>
           {monster.sets > 1 && (
-            <Text style={battle.setText} pointerEvents="none">
+            <Text style={[battle.setText, {top: 208 + insets.top}]} pointerEvents="none">
               Сет {setIndex + 1}/{monster.sets} · цель {monster.repsPerSet}
             </Text>
           )}

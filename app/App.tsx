@@ -27,13 +27,11 @@ export default function App() {
   }, []);
 
   const onDefeated = () => {
-    setProgression(prev => {
-      const m = currentMonster(prev);
-      setDefeatedName(m ? m.name : '');
-      const next = defeatMonster(prev, new Date().toISOString().slice(0, 10));
-      saveProgression(next);
-      return next;
-    });
+    const m = currentMonster(progression);
+    setDefeatedName(m ? m.name : '');
+    const next = defeatMonster(progression, new Date().toISOString().slice(0, 10));
+    setProgression(next);
+    saveProgression(next);
     playVictory();
     setScreen('victory');
   };
