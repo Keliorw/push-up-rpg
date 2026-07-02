@@ -510,7 +510,9 @@ export function WorkoutScreen({
             </Text>
           )}
           {/* Золотой счётчик — снизу центр */}
-          <View style={battle.counter} pointerEvents="none">
+          <View
+            style={[battle.counter, {bottom: 24 + insets.bottom}]}
+            pointerEvents="none">
             <Text style={battle.counterText}>{reps}</Text>
           </View>
         </>
