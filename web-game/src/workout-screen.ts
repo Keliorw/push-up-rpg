@@ -46,6 +46,16 @@ export function startWorkout(app: App): void {
   const restEl = document.getElementById('wk-rest') as HTMLElement;
   const statusEl = document.getElementById('wk-status')!;
   const backBtn = document.getElementById('wk-back') as HTMLButtonElement;
+  const monsterImg = document.getElementById('wk-monster') as HTMLImageElement;
+  const monsterName = document.getElementById('wk-monster-name') as HTMLElement;
+
+  // Картинка текущего монстра на экране тренировки.
+  monsterImg.src = `./games/${monster.cardImage}`;
+  monsterName.textContent = monster.name;
+
+  // Звук урона по мобу (каждое отжимание = урон = XP).
+  const hitSound = new Audio('./games/hit.mp3');
+  hitSound.volume = 0.6;
 
   const detector = new RepDetector(DEFAULT_CONFIG);
   let wk: WorkoutState = newWorkout(monster);
@@ -96,6 +106,12 @@ export function startWorkout(app: App): void {
   }
 
   function handleRep() {
+    try {
+      hitSound.currentTime = 0;
+      hitSound.play().catch(() => {});
+    } catch {
+      // звук не критичен
+    }
     const res = onRep(wk, monster);
     wk = res.state;
     updateHud();

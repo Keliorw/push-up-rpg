@@ -61,15 +61,16 @@ export const MONSTER_SEQUENCE: Monster[] = LOCATIONS.flatMap(l => l.monsters);
  * Откалибровано по картинке; при необходимости уточняется вручную. Для MVP
  * геймплейно важны только 1–3; 4–10 показываются заблокированными.
  */
+// Откалибровано по кружкам на games/map.png (проверено наложением маркеров).
 export const NODE_POSITIONS: {x: number; y: number}[] = [
-  {x: 0.21, y: 0.93}, // 1
-  {x: 0.57, y: 0.79}, // 2
-  {x: 0.42, y: 0.71}, // 3
-  {x: 0.57, y: 0.63}, // 4
-  {x: 0.42, y: 0.55}, // 5
-  {x: 0.58, y: 0.47}, // 6
-  {x: 0.48, y: 0.39}, // 7
-  {x: 0.57, y: 0.31}, // 8
-  {x: 0.40, y: 0.24}, // 9
-  {x: 0.53, y: 0.16}, // 10
+  {x: 0.5, y: 0.915}, // 1  Plague Sewers (низ, центр)
+  {x: 0.58, y: 0.805}, // 2  Goblin War-Camp
+  {x: 0.42, y: 0.725}, // 3  Undead Crypt
+  {x: 0.57, y: 0.645}, // 4  Fetid Swamp
+  {x: 0.41, y: 0.56}, // 5  Harpy Cliffs
+  {x: 0.57, y: 0.485}, // 6  Minotaur Labyrinth
+  {x: 0.46, y: 0.405}, // 7  Iron Fortress
+  {x: 0.57, y: 0.325}, // 8  Volcanic Lava
+  {x: 0.4, y: 0.25}, // 9  Hellish Chasm
+  {x: 0.53, y: 0.185}, // 10 Finale
 ];

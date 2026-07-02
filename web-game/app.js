@@ -42,26 +42,26 @@ var LOCATIONS = [
 ];
 var MONSTER_SEQUENCE = LOCATIONS.flatMap((l) => l.monsters);
 var NODE_POSITIONS = [
-  { x: 0.21, y: 0.93 },
-  // 1
-  { x: 0.57, y: 0.79 },
-  // 2
-  { x: 0.42, y: 0.71 },
-  // 3
-  { x: 0.57, y: 0.63 },
-  // 4
-  { x: 0.42, y: 0.55 },
-  // 5
-  { x: 0.58, y: 0.47 },
-  // 6
-  { x: 0.48, y: 0.39 },
-  // 7
-  { x: 0.57, y: 0.31 },
-  // 8
-  { x: 0.4, y: 0.24 },
-  // 9
-  { x: 0.53, y: 0.16 }
-  // 10
+  { x: 0.5, y: 0.915 },
+  // 1  Plague Sewers (низ, центр)
+  { x: 0.58, y: 0.805 },
+  // 2  Goblin War-Camp
+  { x: 0.42, y: 0.725 },
+  // 3  Undead Crypt
+  { x: 0.57, y: 0.645 },
+  // 4  Fetid Swamp
+  { x: 0.41, y: 0.56 },
+  // 5  Harpy Cliffs
+  { x: 0.57, y: 0.485 },
+  // 6  Minotaur Labyrinth
+  { x: 0.46, y: 0.405 },
+  // 7  Iron Fortress
+  { x: 0.57, y: 0.325 },
+  // 8  Volcanic Lava
+  { x: 0.4, y: 0.25 },
+  // 9  Hellish Chasm
+  { x: 0.53, y: 0.185 }
+  // 10 Finale
 ];
 
 // app/src/game/progression.ts
@@ -105,11 +105,6 @@ function resetProgression() {
   localStorage.removeItem(KEY);
 }
 
-// app/src/game/dailyLock.ts
-function isLockedToday(p, today) {
-  return p.lastWorkoutDate === today;
-}
-
 // web-game/src/map.ts
 function currentLocationIndex(app2) {
   const m = currentMonster(app2.progression);
@@ -121,7 +116,6 @@ function renderMap(app2) {
   const wrap = document.getElementById("map-wrap");
   wrap.querySelectorAll(".node").forEach((n) => n.remove());
   const curLoc = currentLocationIndex(app2);
-  const locked = isLockedToday(app2.progression, todayISO());
   for (let i = 0; i < NODE_POSITIONS.length; i++) {
     const locIndex = i + 1;
     const pos = NODE_POSITIONS[i];
@@ -137,9 +131,7 @@ function renderMap(app2) {
       el.classList.add("done");
     } else if (locIndex === curLoc && hasContent) {
       el.classList.add("current");
-      if (!locked) {
-        el.addEventListener("click", () => app2.goCard());
-      }
+      el.addEventListener("click", () => app2.goCard());
     } else {
       el.classList.add("locked");
     }
@@ -197,14 +189,8 @@ function renderCard(app2) {
   img.src = `./games/${m.cardImage}`;
   hp.style.width = "100%";
   target.textContent = m.kind === "boss" ? `\u0411\u041E\u0421\u0421: ${m.sets} \u043F\u043E\u0434\u0445\u043E\u0434\u0430 \xD7 ${m.repsPerSet} (\u0432\u0441\u0435\u0433\u043E ${totalTarget(m)})` : `\u041F\u043E\u0431\u0435\u0434\u0438: ${m.repsPerSet} \u043E\u0442\u0436\u0438\u043C\u0430\u043D\u0438\u0439`;
-  const locked = isLockedToday(app2.progression, todayISO());
-  if (locked) {
-    startBtn.style.display = "none";
-    hint.textContent = "\u0422\u0440\u0435\u043D\u0438\u0440\u043E\u0432\u043A\u0430 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u2014 \u043F\u0440\u0438\u0445\u043E\u0434\u0438 \u0437\u0430\u0432\u0442\u0440\u0430.";
-  } else {
-    startBtn.style.display = "";
-    hint.textContent = "";
-  }
+  startBtn.style.display = "";
+  hint.textContent = "";
 }
 
 // app/src/pose/config.ts
@@ -532,6 +518,12 @@ function startWorkout(app2) {
   const restEl = document.getElementById("wk-rest");
   const statusEl = document.getElementById("wk-status");
   const backBtn = document.getElementById("wk-back");
+  const monsterImg = document.getElementById("wk-monster");
+  const monsterName = document.getElementById("wk-monster-name");
+  monsterImg.src = `./games/${monster.cardImage}`;
+  monsterName.textContent = monster.name;
+  const hitSound = new Audio("./games/hit.mp3");
+  hitSound.volume = 0.6;
   const detector = new RepDetector(DEFAULT_CONFIG);
   let wk = newWorkout(monster);
   let resting = false;
@@ -576,6 +568,12 @@ function startWorkout(app2) {
     }
   }
   function handleRep() {
+    try {
+      hitSound.currentTime = 0;
+      hitSound.play().catch(() => {
+      });
+    } catch {
+    }
     const res = onRep(wk, monster);
     wk = res.state;
     updateHud();

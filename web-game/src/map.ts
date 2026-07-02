@@ -1,7 +1,5 @@
 import {LOCATIONS, NODE_POSITIONS} from '../../app/src/game/monsters';
 import {currentMonster} from '../../app/src/game/progression';
-import {isLockedToday} from '../../app/src/game/dailyLock';
-import {todayISO} from './dates';
 import type {App} from './main';
 
 /** Индекс локации (1-based) текущего монстра, или null если игра пройдена. */
@@ -19,7 +17,6 @@ export function renderMap(app: App): void {
   wrap.querySelectorAll('.node').forEach(n => n.remove());
 
   const curLoc = currentLocationIndex(app);
-  const locked = isLockedToday(app.progression, todayISO());
 
   for (let i = 0; i < NODE_POSITIONS.length; i++) {
     const locIndex = i + 1;
@@ -38,9 +35,7 @@ export function renderMap(app: App): void {
       el.classList.add('done');
     } else if (locIndex === curLoc && hasContent) {
       el.classList.add('current');
-      if (!locked) {
-        el.addEventListener('click', () => app.goCard());
-      }
+      el.addEventListener('click', () => app.goCard());
     } else {
       el.classList.add('locked');
     }

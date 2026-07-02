@@ -1,7 +1,5 @@
 import {currentMonster} from '../../app/src/game/progression';
-import {isLockedToday} from '../../app/src/game/dailyLock';
 import {totalTarget} from '../../app/src/game/workout';
-import {todayISO} from './dates';
 import type {App} from './main';
 
 export function renderCard(app: App): void {
@@ -27,12 +25,6 @@ export function renderCard(app: App): void {
       ? `БОСС: ${m.sets} подхода × ${m.repsPerSet} (всего ${totalTarget(m)})`
       : `Победи: ${m.repsPerSet} отжиманий`;
 
-  const locked = isLockedToday(app.progression, todayISO());
-  if (locked) {
-    startBtn.style.display = 'none';
-    hint.textContent = 'Тренировка на сегодня выполнена — приходи завтра.';
-  } else {
-    startBtn.style.display = '';
-    hint.textContent = '';
-  }
+  startBtn.style.display = '';
+  hint.textContent = '';
 }
