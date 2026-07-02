@@ -69,6 +69,18 @@ function bodyPose(shoulderY: number, bent = false, score = 0.9): Pose {
   return pose;
 }
 
+/** Стоящий человек: точки вытянуты вертикально, узкая рамка (аспект большой). */
+function standingPose(score = 0.9): Pose {
+  const pose = blankPose();
+  pose[KP.leftShoulder] = {x: 0.48, y: 0.2, score};
+  pose[KP.rightShoulder] = {x: 0.52, y: 0.2, score};
+  pose[KP.leftHip] = {x: 0.48, y: 0.5, score};
+  pose[KP.rightHip] = {x: 0.52, y: 0.5, score};
+  pose[KP.leftKnee] = {x: 0.48, y: 0.75, score};
+  pose[KP.rightKnee] = {x: 0.52, y: 0.75, score};
+  return pose;
+}
+
 test('пустая поза — нет позиции и событий', () => {
   const d = new RepDetector(CFG);
   expect(d.process(blankPose(), 0)).toEqual([]);
@@ -89,6 +101,15 @@ test('согнутый корпус (сидя) НЕ даёт позицию', ()
   expect(d.process(bodyPose(0.3, true), 0)).toEqual([]);
   expect(d.process(bodyPose(0.3, true), 1500)).toEqual([]);
   expect(d.debug.inPosition).toBe(false);
+});
+
+test('стоящий (вытянут вертикально) НЕ даёт позицию, даже если корпус прямой', () => {
+  const d = new RepDetector(CFG);
+  expect(d.process(standingPose(), 0)).toEqual([]);
+  expect(d.process(standingPose(), 1500)).toEqual([]);
+  expect(d.debug.inPosition).toBe(false);
+  expect(d.debug.bodyAspect).not.toBeNull();
+  expect(d.debug.bodyAspect! > CFG.maxBodyAspect).toBe(true);
 });
 
 test('повтор по вертикальному проседанию корпуса (без рук в кадре)', () => {

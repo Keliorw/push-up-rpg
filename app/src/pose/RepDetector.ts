@@ -21,6 +21,8 @@ export interface DetectorDebug {
   phase: Phase;
   /** Сколько ключевых точек прошло порог уверенности (индикатор «есть человек»). */
   visibleKeypoints: number;
+  /** Отношение высота/ширина рамки тела (>~2.5 = стоящий, не планка). */
+  bodyAspect: number | null;
 }
 
 type State = 'noPosition' | 'holding' | 'up' | 'down';
@@ -60,12 +62,14 @@ export class RepDetector {
     descent: null,
     phase: 'up',
     visibleKeypoints: 0,
+    bodyAspect: null,
   };
 
   constructor(private readonly cfg: DetectorConfig = DEFAULT_CONFIG) {}
 
   process(pose: Pose, tMs: number): DetectorEvent[] {
     this.debug.visibleKeypoints = this.countVisible(pose);
+    this.debug.bodyAspect = this.bodyAspect(pose);
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
@@ -147,6 +151,39 @@ export class RepDetector {
     return elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
   }
 
+  /**
+   * Отношение высота/ширина рамки уверенных точек. Стоящий человек вытянут
+   * вертикально (большое отношение); планка сплюснута. null — точек мало или
+   * рамка вырождена по ширине.
+   */
+  private bodyAspect(pose: Pose): number | null {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      const p = pose[i];
+      if (!p || p.score < this.cfg.minKeypointScore) {
+        continue;
+      }
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+      n++;
+    }
+    if (n < 4) {
+      return null;
+    }
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (w < 1e-6) {
+      return null;
+    }
+    return h / w;
+  }
+
   private countVisible(pose: Pose): number {
     let n = 0;
     for (let i = 0; i < pose.length; i++) {
@@ -203,14 +240,14 @@ export class RepDetector {
     const hip = this.mid(pose, KP.leftHip, KP.rightHip);
     const knee = this.mid(pose, KP.leftKnee, KP.rightKnee);
 
-    // Строгий гейт планки — тело и ноги видны: корпус должен быть прямым.
+    // Строгий гейт планки — тело и ноги видны: корпус прямой И тело
+    // горизонтальное (не вытянуто вертикально, как у стоящего человека).
     if (shoulder && hip && knee) {
       const torsoAngle = angleDeg(shoulder, hip, knee);
-      return {
-        inPosition: torsoAngle >= this.cfg.plankBodyMinAngleDeg,
-        mode: 'plank',
-        torsoAngle,
-      };
+      const aspect = this.bodyAspect(pose);
+      const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
+      const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
+      return {inPosition: straight && horizontal, mode: 'plank', torsoAngle};
     }
 
     // Запасной гейт — ноги вне кадра: плечи + хотя бы одна рука с запястьем

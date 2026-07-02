@@ -19,6 +19,12 @@ export interface DetectorConfig {
    * Применяется, только когда видны бёдра и колени; иначе — запасной гейт.
    */
   plankBodyMinAngleDeg: number;
+  /**
+   * Максимальное отношение высота/ширина рамки тела для планки. Стоящий человек
+   * вытянут вертикально (отношение ~4–5) — это НЕ планка (отсекает наклоны стоя
+   * и касания ног). Настоящая планка сплюснута/руки в стороны (~1.5).
+   */
+  maxBodyAspect: number;
 
   // --- Сигнал повтора №1: вертикальное проседание корпуса (основной) ---
   /**
@@ -56,6 +62,7 @@ export const DEFAULT_CONFIG: DetectorConfig = {
   minRepDurationMs: 700,
 
   plankBodyMinAngleDeg: 140,
+  maxBodyAspect: 2.5,
 
   descentDownFrac: 0.14,
   descentUpFrac: 0.05,

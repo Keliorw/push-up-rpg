@@ -5,6 +5,7 @@ var DEFAULT_CONFIG = {
   gateLostGraceMs: 700,
   minRepDurationMs: 700,
   plankBodyMinAngleDeg: 140,
+  maxBodyAspect: 2.5,
   descentDownFrac: 0.14,
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
@@ -74,10 +75,12 @@ var RepDetector = class {
     elbowAngle: null,
     descent: null,
     phase: "up",
-    visibleKeypoints: 0
+    visibleKeypoints: 0,
+    bodyAspect: null
   };
   process(pose, tMs) {
     this.debug.visibleKeypoints = this.countVisible(pose);
+    this.debug.bodyAspect = this.bodyAspect(pose);
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
@@ -140,6 +143,38 @@ var RepDetector = class {
     }
     return elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
   }
+  /**
+   * Отношение высота/ширина рамки уверенных точек. Стоящий человек вытянут
+   * вертикально (большое отношение); планка сплюснута. null — точек мало или
+   * рамка вырождена по ширине.
+   */
+  bodyAspect(pose) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      const p = pose[i];
+      if (!p || p.score < this.cfg.minKeypointScore) {
+        continue;
+      }
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+      n++;
+    }
+    if (n < 4) {
+      return null;
+    }
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (w < 1e-6) {
+      return null;
+    }
+    return h / w;
+  }
   countVisible(pose) {
     let n = 0;
     for (let i = 0; i < pose.length; i++) {
@@ -189,11 +224,10 @@ var RepDetector = class {
     const knee = this.mid(pose, KP.leftKnee, KP.rightKnee);
     if (shoulder && hip && knee) {
       const torsoAngle = angleDeg(shoulder, hip, knee);
-      return {
-        inPosition: torsoAngle >= this.cfg.plankBodyMinAngleDeg,
-        mode: "plank",
-        torsoAngle
-      };
+      const aspect = this.bodyAspect(pose);
+      const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
+      const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
+      return { inPosition: straight && horizontal, mode: "plank", torsoAngle };
     }
     if (shoulder) {
       for (const arm of ARMS) {
@@ -400,7 +434,7 @@ async function main() {
     const dbg = detectorLogic.debug;
     trackRanges(dbg.descent, dbg.elbowAngle);
     const posColor = dbg.inPosition ? "#5ad469" : "#ff6b6b";
-    debugEl.innerHTML = "<div>\u0433\u0435\u0439\u0442: <b>" + dbg.gateMode + '</b> &nbsp; \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u043A\u043E\u0440\u043F\u0443\u0441: <b>" + fmt(dbg.torsoAngle, 0, "\xB0") + "</b> &nbsp; \u0442\u043E\u0447\u0435\u043A: <b>" + dbg.visibleKeypoints + "/17</b></div><div>\u043F\u0440\u043E\u0441\u0435\u0434\u0430\u043D\u0438\u0435: <b>" + fmt(dbg.descent, 2) + "</b> &nbsp; \u043C\u0430\u043A\u0441 \u0437\u0430 \u043F\u043E\u0434\u0445\u043E\u0434: <b>" + rangeStr(descentMin, descentMax, 2) + "</b> &nbsp; (\u043F\u043E\u0440\u043E\u0433 " + DEFAULT_CONFIG.descentDownFrac + ")</div><div>\u043B\u043E\u043A\u043E\u0442\u044C: <b>" + fmt(dbg.elbowAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(elbowMin, elbowMax, 0) + "\xB0</b> &nbsp; (\u0441\u0433\u0438\u0431&lt;" + DEFAULT_CONFIG.elbowFlexedDeg + " \u0440\u0430\u0437\u0433\u0438\u0431&gt;" + DEFAULT_CONFIG.elbowExtendedDeg + ')</div><div style="opacity:.6;font-size:.7em">\u043A\u043B\u0438\u043A \u2014 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u044B \u0438 \u0441\u0447\u0451\u0442\u0447\u0438\u043A</div>';
+    debugEl.innerHTML = "<div>\u0433\u0435\u0439\u0442: <b>" + dbg.gateMode + '</b> &nbsp; \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u043A\u043E\u0440\u043F\u0443\u0441: <b>" + fmt(dbg.torsoAngle, 0, "\xB0") + "</b> &nbsp; \u0444\u043E\u0440\u043C\u0430\u0442 \u0442\u0435\u043B\u0430: <b>" + fmt(dbg.bodyAspect, 1) + "</b> (\u043F\u043B\u0430\u043D\u043A\u0430&lt;" + DEFAULT_CONFIG.maxBodyAspect + ") &nbsp; \u0442\u043E\u0447\u0435\u043A: <b>" + dbg.visibleKeypoints + "/17</b></div><div>\u043F\u0440\u043E\u0441\u0435\u0434\u0430\u043D\u0438\u0435: <b>" + fmt(dbg.descent, 2) + "</b> &nbsp; \u043C\u0430\u043A\u0441 \u0437\u0430 \u043F\u043E\u0434\u0445\u043E\u0434: <b>" + rangeStr(descentMin, descentMax, 2) + "</b> &nbsp; (\u043F\u043E\u0440\u043E\u0433 " + DEFAULT_CONFIG.descentDownFrac + ")</div><div>\u043B\u043E\u043A\u043E\u0442\u044C: <b>" + fmt(dbg.elbowAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(elbowMin, elbowMax, 0) + "\xB0</b> &nbsp; (\u0441\u0433\u0438\u0431&lt;" + DEFAULT_CONFIG.elbowFlexedDeg + " \u0440\u0430\u0437\u0433\u0438\u0431&gt;" + DEFAULT_CONFIG.elbowExtendedDeg + ')</div><div style="opacity:.6;font-size:.7em">\u043A\u043B\u0438\u043A \u2014 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u044B \u0438 \u0441\u0447\u0451\u0442\u0447\u0438\u043A</div>';
     requestAnimationFrame(loop);
   }
   loop();
