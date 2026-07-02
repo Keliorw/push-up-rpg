@@ -52,20 +52,19 @@ function armPose(angle: number, score = 0.9): Pose {
  * плеч; bent=true сгибает корпус (имитация «сидя», угол в бедре ~90°).
  */
 function bodyPose(shoulderY: number, bent = false, score = 0.9): Pose {
-  // Широкая рамка (руки/плечи у камеры) → aspect ~1.3 < maxBodyAspect: планка.
   const pose = blankPose();
-  pose[KP.leftShoulder] = {x: 0.3, y: shoulderY, score};
-  pose[KP.rightShoulder] = {x: 0.7, y: shoulderY, score};
-  pose[KP.leftHip] = {x: 0.4, y: shoulderY + 0.2, score};
-  pose[KP.rightHip] = {x: 0.6, y: shoulderY + 0.2, score};
+  pose[KP.leftShoulder] = {x: 0.4, y: shoulderY, score};
+  pose[KP.rightShoulder] = {x: 0.6, y: shoulderY, score};
+  pose[KP.leftHip] = {x: 0.45, y: shoulderY + 0.2, score};
+  pose[KP.rightHip] = {x: 0.55, y: shoulderY + 0.2, score};
   if (bent) {
     // Колени вбок от бёдер → угол плечо–бедро–колено ~90° (не планка).
-    pose[KP.leftKnee] = {x: 0.7, y: shoulderY + 0.2, score};
-    pose[KP.rightKnee] = {x: 0.8, y: shoulderY + 0.2, score};
+    pose[KP.leftKnee] = {x: 0.65, y: shoulderY + 0.2, score};
+    pose[KP.rightKnee] = {x: 0.75, y: shoulderY + 0.2, score};
   } else {
     // Колени на одной линии ниже бёдер → корпус прямой (~180°).
-    pose[KP.leftKnee] = {x: 0.4, y: shoulderY + 0.4, score};
-    pose[KP.rightKnee] = {x: 0.6, y: shoulderY + 0.4, score};
+    pose[KP.leftKnee] = {x: 0.45, y: shoulderY + 0.4, score};
+    pose[KP.rightKnee] = {x: 0.55, y: shoulderY + 0.4, score};
   }
   return pose;
 }

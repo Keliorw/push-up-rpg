@@ -5,7 +5,7 @@ var DEFAULT_CONFIG = {
   gateLostGraceMs: 700,
   minRepDurationMs: 700,
   plankBodyMinAngleDeg: 140,
-  maxBodyAspect: 2,
+  maxBodyAspect: 2.5,
   descentDownFrac: 0.14,
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
