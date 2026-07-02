@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>push-up-rpg</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: #101828; color: #fff;
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex; justify-content: center;
+      }
+      #app { width: 100%; max-width: 480px; position: relative; }
+      .screen { display: none; }
+      .screen.active { display: block; }
+      button { font-family: inherit; }
+      .btn {
+        background: #F5A623; color: #101828; border: none; border-radius: 40px;
+        padding: 16px 40px; font-size: 20px; font-weight: 800; letter-spacing: 1px;
+      }
+      .btn:disabled { opacity: .5; }
+      /* START */
+      #screen-start { text-align: center; padding-top: 30vh; }
+      #screen-start h1 { font-size: 32px; font-weight: 900; }
+      /* MAP */
+      #map-wrap { position: relative; }
+      #map-img { width: 100%; display: block; }
+      .node {
+        position: absolute; width: 34px; height: 34px; transform: translate(-50%, -50%);
+        border-radius: 50%; border: 3px solid #fff; display: flex;
+        align-items: center; justify-content: center; font-weight: 800; font-size: 16px;
+        background: rgba(0,0,0,.55); color: #fff;
+      }
+      .node.done { background: #2e7d32; }
+      .node.current { border-color: #F5A623; box-shadow: 0 0 0 4px rgba(245,166,35,.5); }
+      .node.locked { opacity: .55; }
+      .node.current { cursor: pointer; }
+      /* CARD */
+      #screen-card { padding: 12px; text-align: center; }
+      #card-img { width: 100%; border-radius: 12px; display: block; }
+      #card-target { font-size: 20px; margin: 12px 0; }
+      .hpbar { height: 16px; background: #333; border-radius: 8px; overflow: hidden; margin: 8px 0; }
+      .hpbar > i { display: block; height: 100%; background: #d64545; width: 100%; }
+      /* WORKOUT */
+      #screen-workout { position: relative; }
+      #wk-stage { position: relative; transform: scaleX(-1); }
+      #wk-video, #wk-overlay { width: 100%; display: block; }
+      #wk-video { background: #000; }
+      #wk-overlay { position: absolute; inset: 0; }
+      #wk-hud { position: absolute; inset: 0; pointer-events: none; }
+      #wk-counter { position: absolute; top: 8px; left: 0; right: 0; text-align: center;
+        font-size: 64px; font-weight: 900; color: #F5A623; text-shadow: 0 2px 8px #000; }
+      #wk-set { position: absolute; top: 84px; left: 0; right: 0; text-align: center; font-size: 18px; }
+      #wk-rest { position: absolute; inset: 0; display: none; align-items: center;
+        justify-content: center; flex-direction: column; background: rgba(0,0,0,.8); font-size: 24px; }
+      /* VICTORY */
+      #screen-victory { text-align: center; padding-top: 30vh; }
+      #screen-victory h1 { color: #F5A623; font-size: 40px; font-weight: 900; }
+      /* DEV */
+      #dev { position: fixed; bottom: 0; left: 0; right: 0; background: #0b111f;
+        font-size: 12px; padding: 6px; display: flex; gap: 6px; flex-wrap: wrap;
+        justify-content: center; opacity: .9; }
+      #dev button { background: #24314a; color: #fff; border: 1px solid #3a4a67;
+        border-radius: 6px; padding: 4px 8px; }
+      #hint { font-size: 14px; color: #9aa4b2; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <section id="screen-start" class="screen active">
+        <h1>Push-Ups RPG</h1>
+        <button class="btn" id="start-btn">START</button>
+      </section>
+
+      <section id="screen-map" class="screen">
+        <div id="map-wrap">
+          <img id="map-img" src="./games/map.png" alt="map" />
+          <!-- node markers injected by JS -->
+        </div>
+      </section>
+
+      <section id="screen-card" class="screen">
+        <img id="card-img" alt="enemy" />
+        <div id="card-target"></div>
+        <div class="hpbar"><i id="card-hp"></i></div>
+        <button class="btn" id="card-start-btn">Начать тренировку</button>
+        <div id="hint"></div>
+        <div><button class="btn" id="card-back-btn" style="background:#24314a;color:#fff;margin-top:8px">Назад</button></div>
+      </section>
+
+      <section id="screen-workout" class="screen">
+        <div id="wk-stage">
+          <video id="wk-video" playsinline muted></video>
+          <canvas id="wk-overlay"></canvas>
+        </div>
+        <div id="wk-hud">
+          <div id="wk-counter">0</div>
+          <div id="wk-set"></div>
+        </div>
+        <div class="hpbar" style="position:absolute;top:60px;left:8px;right:8px">
+          <i id="wk-hp"></i>
+        </div>
+        <div id="wk-rest"></div>
+        <div id="wk-status" style="text-align:center;color:#F5A623;padding:6px"></div>
+      </section>
+
+      <section id="screen-victory" class="screen">
+        <h1>Повержен!</h1>
+        <div id="victory-name"></div>
+        <button class="btn" id="victory-btn" style="margin-top:24px">На карту</button>
+      </section>
+    </div>
+
+    <div id="dev">
+      <span>DEV:</span>
+      <button id="dev-reset-day">сбросить день</button>
+      <button id="dev-reset-progress">сбросить прогресс</button>
+      <button id="dev-prev">◀ монстр</button>
+      <button id="dev-next">монстр ▶</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
