@@ -91,7 +91,9 @@ function loadProgression() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return INITIAL_PROGRESSION;
     const p = JSON.parse(raw);
-    if (typeof p.defeatedCount === "number") return p;
+    const defeatedCount = Number.isFinite(p.defeatedCount) ? Math.max(0, Math.min(MONSTER_SEQUENCE.length, Math.floor(p.defeatedCount))) : INITIAL_PROGRESSION.defeatedCount;
+    const lastWorkoutDate = p.lastWorkoutDate === null || typeof p.lastWorkoutDate === "string" ? p.lastWorkoutDate : null;
+    return { defeatedCount, lastWorkoutDate };
   } catch {
   }
   return INITIAL_PROGRESSION;
@@ -529,10 +531,20 @@ function startWorkout(app2) {
   const hpEl = document.getElementById("wk-hp");
   const restEl = document.getElementById("wk-rest");
   const statusEl = document.getElementById("wk-status");
+  const backBtn = document.getElementById("wk-back");
   const detector = new RepDetector(DEFAULT_CONFIG);
   let wk = newWorkout(monster);
   let resting = false;
   let finished = false;
+  let stream = null;
+  backBtn.onclick = () => {
+    finished = true;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+    app2.render();
+    app2.show("screen-map");
+  };
   const updateHud = () => {
     counterEl.textContent = String(wk.repsInSet);
     setEl.textContent = monster.sets > 1 ? `\u0421\u0435\u0442 ${wk.setIndex + 1}/${monster.sets} \xB7 \u0446\u0435\u043B\u044C ${monster.repsPerSet}` : `\u0426\u0435\u043B\u044C ${monster.repsPerSet}`;
@@ -603,7 +615,7 @@ function startWorkout(app2) {
   }
   async function run() {
     statusEl.textContent = "\u0417\u0430\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E \u043A\u0430\u043C\u0435\u0440\u0443\u2026";
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: 640, height: 480 },
       audio: false
     });

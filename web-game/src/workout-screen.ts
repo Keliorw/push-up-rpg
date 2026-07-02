@@ -45,11 +45,22 @@ export function startWorkout(app: App): void {
   const hpEl = document.getElementById('wk-hp') as HTMLElement;
   const restEl = document.getElementById('wk-rest') as HTMLElement;
   const statusEl = document.getElementById('wk-status')!;
+  const backBtn = document.getElementById('wk-back') as HTMLButtonElement;
 
   const detector = new RepDetector(DEFAULT_CONFIG);
   let wk: WorkoutState = newWorkout(monster);
   let resting = false;
   let finished = false;
+  let stream: MediaStream | null = null;
+
+  backBtn.onclick = () => {
+    finished = true;
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+    }
+    app.render();
+    app.show('screen-map');
+  };
 
   const updateHud = () => {
     counterEl.textContent = String(wk.repsInSet);
@@ -127,7 +138,7 @@ export function startWorkout(app: App): void {
 
   async function run() {
     statusEl.textContent = 'Запрашиваю камеру…';
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       video: {facingMode: 'user', width: 640, height: 480},
       audio: false,
     });
