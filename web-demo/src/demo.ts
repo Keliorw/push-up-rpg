@@ -116,6 +116,34 @@ function fmt(n: number | null, digits = 0, suffix = ''): string {
   return n == null ? '—' : n.toFixed(digits) + suffix;
 }
 
+// Rolling min/max of the key signals, so a few real push-ups reveal the actual
+// range and we can calibrate thresholds. Reset by clicking anywhere.
+let descentMin = Infinity;
+let descentMax = -Infinity;
+let elbowMin = Infinity;
+let elbowMax = -Infinity;
+function trackRanges(descent: number | null, elbow: number | null) {
+  if (descent != null) {
+    descentMin = Math.min(descentMin, descent);
+    descentMax = Math.max(descentMax, descent);
+  }
+  if (elbow != null) {
+    elbowMin = Math.min(elbowMin, elbow);
+    elbowMax = Math.max(elbowMax, elbow);
+  }
+}
+function rangeStr(min: number, max: number, digits: number): string {
+  if (min === Infinity) return '—';
+  return min.toFixed(digits) + '…' + max.toFixed(digits);
+}
+document.body.addEventListener('click', () => {
+  descentMin = Infinity;
+  descentMax = -Infinity;
+  elbowMin = Infinity;
+  elbowMax = -Infinity;
+  reps = 0;
+});
+
 async function main() {
   setStatus('Запрашиваю камеру…');
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -152,14 +180,22 @@ async function main() {
 
     // Live detector signals — use these to calibrate config.ts thresholds.
     const dbg = detectorLogic.debug;
-    debugEl.textContent =
-      'гейт: ' + dbg.gateMode +
-      '  | в позиции: ' + (dbg.inPosition ? 'да' : 'нет') +
-      '  | фаза: ' + dbg.phase +
-      '  | корпус: ' + fmt(dbg.torsoAngle, 0, '°') +
-      '  | проседание: ' + fmt(dbg.descent, 2) +
-      ' (порог ' + DEFAULT_CONFIG.descentDownFrac + ')' +
-      '  | локоть: ' + fmt(dbg.elbowAngle, 0, '°');
+    trackRanges(dbg.descent, dbg.elbowAngle);
+    const posColor = dbg.inPosition ? '#5ad469' : '#ff6b6b';
+    debugEl.innerHTML =
+      '<div>гейт: <b>' + dbg.gateMode + '</b>' +
+      ' &nbsp; в позиции: <b style="color:' + posColor + '">' +
+      (dbg.inPosition ? 'ДА' : 'НЕТ') + '</b>' +
+      ' &nbsp; фаза: <b>' + dbg.phase + '</b>' +
+      ' &nbsp; корпус: <b>' + fmt(dbg.torsoAngle, 0, '°') + '</b></div>' +
+      '<div>проседание: <b>' + fmt(dbg.descent, 2) + '</b>' +
+      ' &nbsp; макс за подход: <b>' + rangeStr(descentMin, descentMax, 2) + '</b>' +
+      ' &nbsp; (порог ' + DEFAULT_CONFIG.descentDownFrac + ')</div>' +
+      '<div>локоть: <b>' + fmt(dbg.elbowAngle, 0, '°') + '</b>' +
+      ' &nbsp; диапазон: <b>' + rangeStr(elbowMin, elbowMax, 0) + '°</b>' +
+      ' &nbsp; (сгиб&lt;' + DEFAULT_CONFIG.elbowFlexedDeg +
+      ' разгиб&gt;' + DEFAULT_CONFIG.elbowExtendedDeg + ')</div>' +
+      '<div style="opacity:.6;font-size:.7em">клик — сбросить диапазоны и счётчик</div>';
 
     requestAnimationFrame(loop);
   }
