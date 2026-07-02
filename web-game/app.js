@@ -41,6 +41,28 @@ var LOCATIONS = [
   }
 ];
 var MONSTER_SEQUENCE = LOCATIONS.flatMap((l) => l.monsters);
+var NODE_POSITIONS = [
+  { x: 0.21, y: 0.93 },
+  // 1
+  { x: 0.57, y: 0.79 },
+  // 2
+  { x: 0.42, y: 0.71 },
+  // 3
+  { x: 0.57, y: 0.63 },
+  // 4
+  { x: 0.42, y: 0.55 },
+  // 5
+  { x: 0.58, y: 0.47 },
+  // 6
+  { x: 0.48, y: 0.39 },
+  // 7
+  { x: 0.57, y: 0.31 },
+  // 8
+  { x: 0.4, y: 0.24 },
+  // 9
+  { x: 0.53, y: 0.16 }
+  // 10
+];
 
 // app/src/game/progression.ts
 var INITIAL_PROGRESSION = {
@@ -81,8 +103,46 @@ function resetProgression() {
   localStorage.removeItem(KEY);
 }
 
+// app/src/game/dailyLock.ts
+function isLockedToday(p, today) {
+  return p.lastWorkoutDate === today;
+}
+
 // web-game/src/map.ts
-function renderMap(_app) {
+function currentLocationIndex(app2) {
+  const m = currentMonster(app2.progression);
+  if (!m) return null;
+  const match = /^loc(\d+)-/.exec(m.id);
+  return match ? Number(match[1]) : null;
+}
+function renderMap(app2) {
+  const wrap = document.getElementById("map-wrap");
+  wrap.querySelectorAll(".node").forEach((n) => n.remove());
+  const curLoc = currentLocationIndex(app2);
+  const locked = isLockedToday(app2.progression, todayISO());
+  for (let i = 0; i < NODE_POSITIONS.length; i++) {
+    const locIndex = i + 1;
+    const pos = NODE_POSITIONS[i];
+    const el = document.createElement("div");
+    el.className = "node";
+    el.style.left = `${pos.x * 100}%`;
+    el.style.top = `${pos.y * 100}%`;
+    el.textContent = String(locIndex);
+    const hasContent = locIndex <= LOCATIONS.length;
+    if (curLoc === null) {
+      el.classList.add(hasContent ? "done" : "locked");
+    } else if (locIndex < curLoc) {
+      el.classList.add("done");
+    } else if (locIndex === curLoc && hasContent) {
+      el.classList.add("current");
+      if (!locked) {
+        el.addEventListener("click", () => app2.goCard());
+      }
+    } else {
+      el.classList.add("locked");
+    }
+    wrap.appendChild(el);
+  }
 }
 
 // web-game/src/card.ts
