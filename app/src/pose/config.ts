@@ -33,6 +33,12 @@ export interface DetectorConfig {
   descentSmoothing: number;
   /** Скорость медленного «сползания» базовой (верхней) линии за корпусом. */
   baselineRelaxAlpha: number;
+  /**
+   * Максимально правдоподобное проседание (в долях длины торса). Больше — это
+   * мусорная поза (MoveNet «придумал» скелет на фоне, точки схлопнулись, длина
+   * торса → 0, проседание взрывается). Такой кадр игнорируется, не считается.
+   */
+  maxPlausibleDescent: number;
 
   // --- Сигнал повтора №2: угол локтя (запасной, для вида сбоку/сидя) ---
   /** Угол локтя, при котором руки считаются выпрямленными. */
@@ -44,7 +50,7 @@ export interface DetectorConfig {
 }
 
 export const DEFAULT_CONFIG: DetectorConfig = {
-  minKeypointScore: 0.3,
+  minKeypointScore: 0.4,
   positionHoldMs: 400,
   gateLostGraceMs: 700,
   minRepDurationMs: 700,
@@ -55,6 +61,7 @@ export const DEFAULT_CONFIG: DetectorConfig = {
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
   baselineRelaxAlpha: 0.01,
+  maxPlausibleDescent: 1.5,
 
   elbowExtendedDeg: 155,
   elbowFlexedDeg: 95,

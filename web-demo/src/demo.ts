@@ -187,7 +187,8 @@ async function main() {
       ' &nbsp; в позиции: <b style="color:' + posColor + '">' +
       (dbg.inPosition ? 'ДА' : 'НЕТ') + '</b>' +
       ' &nbsp; фаза: <b>' + dbg.phase + '</b>' +
-      ' &nbsp; корпус: <b>' + fmt(dbg.torsoAngle, 0, '°') + '</b></div>' +
+      ' &nbsp; корпус: <b>' + fmt(dbg.torsoAngle, 0, '°') + '</b>' +
+      ' &nbsp; точек: <b>' + dbg.visibleKeypoints + '/17</b></div>' +
       '<div>проседание: <b>' + fmt(dbg.descent, 2) + '</b>' +
       ' &nbsp; макс за подход: <b>' + rangeStr(descentMin, descentMax, 2) + '</b>' +
       ' &nbsp; (порог ' + DEFAULT_CONFIG.descentDownFrac + ')</div>' +

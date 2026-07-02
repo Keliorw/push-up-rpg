@@ -19,6 +19,8 @@ export interface DetectorDebug {
   /** Сглаженное проседание корпуса в долях длины торса; null если нет торса. */
   descent: number | null;
   phase: Phase;
+  /** Сколько ключевых точек прошло порог уверенности (индикатор «есть человек»). */
+  visibleKeypoints: number;
 }
 
 type State = 'noPosition' | 'holding' | 'up' | 'down';
@@ -57,11 +59,13 @@ export class RepDetector {
     elbowAngle: null,
     descent: null,
     phase: 'up',
+    visibleKeypoints: 0,
   };
 
   constructor(private readonly cfg: DetectorConfig = DEFAULT_CONFIG) {}
 
   process(pose: Pose, tMs: number): DetectorEvent[] {
+    this.debug.visibleKeypoints = this.countVisible(pose);
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
@@ -99,13 +103,13 @@ export class RepDetector {
         }
         return [];
       case 'up':
-        if (this.isDown(elbow, descent)) {
+        if (this.isDown(gate.mode, elbow, descent)) {
           this.state = 'down';
           this.debug.phase = 'down';
         }
         return [];
       case 'down':
-        if (this.isUp(elbow, descent)) {
+        if (this.isUp(gate.mode, elbow, descent)) {
           this.state = 'up';
           this.debug.phase = 'up';
           if (tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
@@ -117,16 +121,40 @@ export class RepDetector {
     }
   }
 
-  private isDown(elbow: number | null, descent: number | null): boolean {
-    const elbowDown = elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
-    const descentDown = descent !== null && descent >= this.cfg.descentDownFrac;
-    return elbowDown || descentDown;
+  // В планке (видно тело+ноги) счёт ведётся ТОЛЬКО по проседанию корпуса —
+  // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
+  // проседания → не считается). Угол локтя используется лишь в запасном
+  // режиме, когда ног в кадре нет и проседание вычислить нельзя.
+  private isDown(
+    mode: GateMode,
+    elbow: number | null,
+    descent: number | null,
+  ): boolean {
+    if (mode === 'plank') {
+      return descent !== null && descent >= this.cfg.descentDownFrac;
+    }
+    return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
 
-  private isUp(elbow: number | null, descent: number | null): boolean {
-    const elbowUp = elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
-    const descentUp = descent !== null && descent <= this.cfg.descentUpFrac;
-    return elbowUp || descentUp;
+  private isUp(
+    mode: GateMode,
+    elbow: number | null,
+    descent: number | null,
+  ): boolean {
+    if (mode === 'plank') {
+      return descent !== null && descent <= this.cfg.descentUpFrac;
+    }
+    return elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
+  }
+
+  private countVisible(pose: Pose): number {
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      if (pose[i] && pose[i].score >= this.cfg.minKeypointScore) {
+        n++;
+      }
+    }
+    return n;
   }
 
   private dropPosition(): DetectorEvent[] {
@@ -248,6 +276,11 @@ export class RepDetector {
       this.baselineTopY += (y - this.baselineTopY) * this.cfg.baselineRelaxAlpha;
     }
     const raw = Math.max(0, (y - this.baselineTopY) / torsoLen);
+    // Неправдоподобно большое проседание = схлопнувшийся «мусорный» скелет на
+    // фоне (torsoLen → 0). Игнорируем кадр, чтобы не считать фантомные повторы.
+    if (raw > this.cfg.maxPlausibleDescent) {
+      return null;
+    }
     this.smoothedDescent =
       this.cfg.descentSmoothing * raw +
       (1 - this.cfg.descentSmoothing) * this.smoothedDescent;

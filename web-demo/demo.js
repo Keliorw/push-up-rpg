@@ -1,6 +1,6 @@
 // app/src/pose/config.ts
 var DEFAULT_CONFIG = {
-  minKeypointScore: 0.3,
+  minKeypointScore: 0.4,
   positionHoldMs: 400,
   gateLostGraceMs: 700,
   minRepDurationMs: 700,
@@ -9,6 +9,7 @@ var DEFAULT_CONFIG = {
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
   baselineRelaxAlpha: 0.01,
+  maxPlausibleDescent: 1.5,
   elbowExtendedDeg: 155,
   elbowFlexedDeg: 95,
   angleSmoothing: 0.4
@@ -72,9 +73,11 @@ var RepDetector = class {
     torsoAngle: null,
     elbowAngle: null,
     descent: null,
-    phase: "up"
+    phase: "up",
+    visibleKeypoints: 0
   };
   process(pose, tMs) {
+    this.debug.visibleKeypoints = this.countVisible(pose);
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
@@ -104,13 +107,13 @@ var RepDetector = class {
         }
         return [];
       case "up":
-        if (this.isDown(elbow, descent)) {
+        if (this.isDown(gate.mode, elbow, descent)) {
           this.state = "down";
           this.debug.phase = "down";
         }
         return [];
       case "down":
-        if (this.isUp(elbow, descent)) {
+        if (this.isUp(gate.mode, elbow, descent)) {
           this.state = "up";
           this.debug.phase = "up";
           if (tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
@@ -121,15 +124,30 @@ var RepDetector = class {
         return [];
     }
   }
-  isDown(elbow, descent) {
-    const elbowDown = elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
-    const descentDown = descent !== null && descent >= this.cfg.descentDownFrac;
-    return elbowDown || descentDown;
+  // В планке (видно тело+ноги) счёт ведётся ТОЛЬКО по проседанию корпуса —
+  // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
+  // проседания → не считается). Угол локтя используется лишь в запасном
+  // режиме, когда ног в кадре нет и проседание вычислить нельзя.
+  isDown(mode, elbow, descent) {
+    if (mode === "plank") {
+      return descent !== null && descent >= this.cfg.descentDownFrac;
+    }
+    return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
-  isUp(elbow, descent) {
-    const elbowUp = elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
-    const descentUp = descent !== null && descent <= this.cfg.descentUpFrac;
-    return elbowUp || descentUp;
+  isUp(mode, elbow, descent) {
+    if (mode === "plank") {
+      return descent !== null && descent <= this.cfg.descentUpFrac;
+    }
+    return elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
+  }
+  countVisible(pose) {
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      if (pose[i] && pose[i].score >= this.cfg.minKeypointScore) {
+        n++;
+      }
+    }
+    return n;
   }
   dropPosition() {
     const wasAcquired = this.state === "up" || this.state === "down";
@@ -231,6 +249,9 @@ var RepDetector = class {
       this.baselineTopY += (y - this.baselineTopY) * this.cfg.baselineRelaxAlpha;
     }
     const raw = Math.max(0, (y - this.baselineTopY) / torsoLen);
+    if (raw > this.cfg.maxPlausibleDescent) {
+      return null;
+    }
     this.smoothedDescent = this.cfg.descentSmoothing * raw + (1 - this.cfg.descentSmoothing) * this.smoothedDescent;
     return this.smoothedDescent;
   }
@@ -379,7 +400,7 @@ async function main() {
     const dbg = detectorLogic.debug;
     trackRanges(dbg.descent, dbg.elbowAngle);
     const posColor = dbg.inPosition ? "#5ad469" : "#ff6b6b";
-    debugEl.innerHTML = "<div>\u0433\u0435\u0439\u0442: <b>" + dbg.gateMode + '</b> &nbsp; \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u043A\u043E\u0440\u043F\u0443\u0441: <b>" + fmt(dbg.torsoAngle, 0, "\xB0") + "</b></div><div>\u043F\u0440\u043E\u0441\u0435\u0434\u0430\u043D\u0438\u0435: <b>" + fmt(dbg.descent, 2) + "</b> &nbsp; \u043C\u0430\u043A\u0441 \u0437\u0430 \u043F\u043E\u0434\u0445\u043E\u0434: <b>" + rangeStr(descentMin, descentMax, 2) + "</b> &nbsp; (\u043F\u043E\u0440\u043E\u0433 " + DEFAULT_CONFIG.descentDownFrac + ")</div><div>\u043B\u043E\u043A\u043E\u0442\u044C: <b>" + fmt(dbg.elbowAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(elbowMin, elbowMax, 0) + "\xB0</b> &nbsp; (\u0441\u0433\u0438\u0431&lt;" + DEFAULT_CONFIG.elbowFlexedDeg + " \u0440\u0430\u0437\u0433\u0438\u0431&gt;" + DEFAULT_CONFIG.elbowExtendedDeg + ')</div><div style="opacity:.6;font-size:.7em">\u043A\u043B\u0438\u043A \u2014 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u044B \u0438 \u0441\u0447\u0451\u0442\u0447\u0438\u043A</div>';
+    debugEl.innerHTML = "<div>\u0433\u0435\u0439\u0442: <b>" + dbg.gateMode + '</b> &nbsp; \u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u043A\u043E\u0440\u043F\u0443\u0441: <b>" + fmt(dbg.torsoAngle, 0, "\xB0") + "</b> &nbsp; \u0442\u043E\u0447\u0435\u043A: <b>" + dbg.visibleKeypoints + "/17</b></div><div>\u043F\u0440\u043E\u0441\u0435\u0434\u0430\u043D\u0438\u0435: <b>" + fmt(dbg.descent, 2) + "</b> &nbsp; \u043C\u0430\u043A\u0441 \u0437\u0430 \u043F\u043E\u0434\u0445\u043E\u0434: <b>" + rangeStr(descentMin, descentMax, 2) + "</b> &nbsp; (\u043F\u043E\u0440\u043E\u0433 " + DEFAULT_CONFIG.descentDownFrac + ")</div><div>\u043B\u043E\u043A\u043E\u0442\u044C: <b>" + fmt(dbg.elbowAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(elbowMin, elbowMax, 0) + "\xB0</b> &nbsp; (\u0441\u0433\u0438\u0431&lt;" + DEFAULT_CONFIG.elbowFlexedDeg + " \u0440\u0430\u0437\u0433\u0438\u0431&gt;" + DEFAULT_CONFIG.elbowExtendedDeg + ')</div><div style="opacity:.6;font-size:.7em">\u043A\u043B\u0438\u043A \u2014 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D\u044B \u0438 \u0441\u0447\u0451\u0442\u0447\u0438\u043A</div>';
     requestAnimationFrame(loop);
   }
   loop();
