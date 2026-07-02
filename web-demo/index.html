@@ -44,21 +44,27 @@
 
       /* HUD overlays the stage but is NOT mirrored, so text reads correctly. */
       #hud { position: absolute; inset: 0; pointer-events: none; }
-      /* Huge centered counter — must be readable from the floor mid-push-up. */
       #counter {
-        position: absolute; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-        font-size: clamp(160px, 46vh, 520px); line-height: 1; font-weight: 900;
-        color: #F5A623;
-        text-shadow: 0 0 4px #000, 0 6px 18px #000, 0 0 28px rgba(0,0,0,.85);
+        position: absolute; top: 8px; left: 0; right: 0;
+        text-align: center; font-size: 64px; line-height: 1; font-weight: 900;
+        color: #F5A623; text-shadow: 0 2px 8px #000;
       }
-      #hint { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; }
+      #hint { position: absolute; top: 84px; left: 0; right: 0; text-align: center; }
       #hint span {
         background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 8px; font-size: 16px;
       }
+      /* Big, high-contrast telemetry — must be readable from the floor for calibration. */
       #debug {
-        font-family: ui-monospace, monospace; font-size: 13px; color: #9aa4b2;
-        background: #0b111f; padding: 8px 12px; border-radius: 8px; text-align: center;
+        font-family: ui-monospace, monospace;
+        font-size: clamp(24px, 3.4vw, 40px);
+        font-weight: 800;
+        line-height: 1.35;
+        color: #fff;
+        background: #0b111f;
+        padding: 14px 20px;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 95vw;
       }
     </style>
   </head>

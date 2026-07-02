@@ -406,13 +406,7 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
           {paddingTop: HUD_PADDING_TOP + insets.top},
         ]}
         pointerEvents="none">
-        <Text
-          style={styles.counter}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.4}>
-          {reps}
-        </Text>
+        <Text style={styles.counter}>{reps}</Text>
         {!inPosition && (
           <View style={styles.hintBox}>
             <Text style={styles.hintText}>Займите упор лёжа</Text>
@@ -457,13 +451,11 @@ const styles = StyleSheet.create({
   },
   counter: {
     color: '#F5A623',
-    // Big enough to read from the floor mid-push-up; auto-shrinks for 3 digits.
-    fontSize: 220,
+    fontSize: 96,
     fontWeight: '900',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: {width: 0, height: 4},
-    textShadowRadius: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: {width: 0, height: 2},
+    textShadowRadius: 8,
   },
   hintBox: {
     marginTop: 16,
