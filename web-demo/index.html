@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>push-up-rpg — веб-демо детекции</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #101828;
+        color: #fff;
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+      }
+      h1 { font-size: 18px; font-weight: 800; margin: 4px 0; }
+      .note { font-size: 13px; color: #9aa4b2; max-width: 680px; text-align: center; }
+      /* Wrapper is mirrored (selfie view); video + overlay flip together so the
+         skeleton stays aligned with the picture. */
+      #stage {
+        position: relative;
+        width: 640px;
+        max-width: 100%;
+        transform: scaleX(-1);
+      }
+      #video, #overlay {
+        width: 100%;
+        display: block;
+        border-radius: 12px;
+        background: #000;
+      }
+      #overlay { position: absolute; inset: 0; }
+      /* HUD is NOT mirrored — counter as a separate un-flipped layer. */
+      #hud {
+        position: relative;
+        width: 640px;
+        max-width: 100%;
+        margin-top: -640px;
+        height: 640px;
+        pointer-events: none;
+      }
+      #counter {
+        position: absolute; top: 12px; left: 0; right: 0;
+        text-align: center; font-size: 88px; font-weight: 900; color: #F5A623;
+        text-shadow: 0 2px 8px #000;
+      }
+      #hint {
+        position: absolute; top: 120px; left: 0; right: 0; text-align: center;
+      }
+      #hint span {
+        background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 8px; font-size: 16px;
+      }
+      #status { font-size: 14px; color: #F5A623; min-height: 18px; }
+      #debug {
+        font-family: ui-monospace, monospace; font-size: 13px; color: #9aa4b2;
+        background: #0b111f; padding: 8px 12px; border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>push-up-rpg — веб-демо детекции (не боевое приложение)</h1>
+    <p class="note">
+      Использует TensorFlow.js MoveNet + настоящий <code>RepDetector</code> из проекта.
+      Встаньте так, чтобы камера видела плечи и руки; чтобы засчитался повтор — держите
+      кисти ниже плеч и сгибайте/разгибайте локти (имитация отжимания).
+    </p>
+    <div id="status">Инициализация…</div>
+    <div id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div id="hud">
+      <div id="counter">0</div>
+      <div id="hint"><span>Займите упор лёжа</span></div>
+    </div>
+    <div id="debug">угол локтя: —</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>
