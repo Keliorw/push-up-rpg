@@ -32,6 +32,23 @@ function show(id: ScreenId): void {
   document.getElementById(id)!.classList.add('active');
 }
 
+// Трек победы (играет на экране «Повержен!», останавливается при выходе на карту).
+let victorySound: HTMLAudioElement | null = null;
+function playVictory(): void {
+  stopVictory();
+  victorySound = new Audio('./games/victory.mp3');
+  victorySound.volume = 0.8;
+  victorySound.play().catch(() => {
+    // автоплей может быть заблокирован — не критично
+  });
+}
+function stopVictory(): void {
+  if (victorySound) {
+    victorySound.pause();
+    victorySound = null;
+  }
+}
+
 const app: App = {
   progression: loadProgression(),
   show,
@@ -52,6 +69,7 @@ const app: App = {
     saveProgression(this.progression);
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
     show('screen-victory');
+    playVictory();
   },
 };
 
@@ -62,6 +80,7 @@ document.getElementById('start-btn')!.addEventListener('click', () => {
 });
 // VICTORY -> map
 document.getElementById('victory-btn')!.addEventListener('click', () => {
+  stopVictory();
   app.render();
   show('screen-map');
 });

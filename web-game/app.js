@@ -146,9 +146,6 @@ function newWorkout(_m) {
 function totalTarget(m) {
   return m.sets * m.repsPerSet;
 }
-function progressFraction(state, m) {
-  return Math.min(1, state.totalReps / totalTarget(m));
-}
 function onRep(state, m) {
   if (state.done) {
     return { state, event: "repCounted" };
@@ -520,8 +517,11 @@ function startWorkout(app2) {
   const backBtn = document.getElementById("wk-back");
   const monsterImg = document.getElementById("wk-monster");
   const monsterName = document.getElementById("wk-monster-name");
+  const hpTextEl = document.getElementById("wk-hp-text");
+  const timeEl = document.getElementById("wk-time");
   monsterImg.src = `./games/${monster.cardImage}`;
   monsterName.textContent = monster.name;
+  const maxHp = totalTarget(monster);
   const hitSound = new Audio("./games/hit.mp3");
   hitSound.volume = 0.6;
   const detector = new RepDetector(DEFAULT_CONFIG);
@@ -529,8 +529,18 @@ function startWorkout(app2) {
   let resting = false;
   let finished = false;
   let stream = null;
+  const startMs = performance.now();
+  const fmtTime = (ms) => {
+    const s = Math.floor(ms / 1e3);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  const timerId = window.setInterval(() => {
+    timeEl.textContent = fmtTime(performance.now() - startMs);
+  }, 250);
+  const stopTimer = () => window.clearInterval(timerId);
   backBtn.onclick = () => {
     finished = true;
+    stopTimer();
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }
@@ -540,7 +550,9 @@ function startWorkout(app2) {
   const updateHud = () => {
     counterEl.textContent = String(wk.repsInSet);
     setEl.textContent = monster.sets > 1 ? `\u0421\u0435\u0442 ${wk.setIndex + 1}/${monster.sets} \xB7 \u0446\u0435\u043B\u044C ${monster.repsPerSet}` : `\u0426\u0435\u043B\u044C ${monster.repsPerSet}`;
-    hpEl.style.width = `${100 - progressFraction(wk, monster) * 100}%`;
+    const hp = Math.max(0, maxHp - wk.totalReps);
+    hpEl.style.width = `${hp / maxHp * 100}%`;
+    hpTextEl.textContent = `${hp} / ${maxHp} HP`;
   };
   updateHud();
   function draw(pose) {
@@ -579,6 +591,7 @@ function startWorkout(app2) {
     updateHud();
     if (res.event === "monsterDefeated") {
       finished = true;
+      stopTimer();
       app2.onDefeated();
     } else if (res.event === "setComplete") {
       startRest();
@@ -663,6 +676,20 @@ function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
+var victorySound = null;
+function playVictory() {
+  stopVictory();
+  victorySound = new Audio("./games/victory.mp3");
+  victorySound.volume = 0.8;
+  victorySound.play().catch(() => {
+  });
+}
+function stopVictory() {
+  if (victorySound) {
+    victorySound.pause();
+    victorySound = null;
+  }
+}
 var app = {
   progression: loadProgression(),
   show,
@@ -683,6 +710,7 @@ var app = {
     saveProgression(this.progression);
     document.getElementById("victory-name").textContent = m ? m.name : "";
     show("screen-victory");
+    playVictory();
   }
 };
 document.getElementById("start-btn").addEventListener("click", () => {
@@ -690,6 +718,7 @@ document.getElementById("start-btn").addEventListener("click", () => {
   show("screen-map");
 });
 document.getElementById("victory-btn").addEventListener("click", () => {
+  stopVictory();
   app.render();
   show("screen-map");
 });

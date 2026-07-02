@@ -6,7 +6,7 @@ import {
   WorkoutState,
   newWorkout,
   onRep,
-  progressFraction,
+  totalTarget,
 } from '../../app/src/game/workout';
 import type {App} from './main';
 
@@ -48,10 +48,14 @@ export function startWorkout(app: App): void {
   const backBtn = document.getElementById('wk-back') as HTMLButtonElement;
   const monsterImg = document.getElementById('wk-monster') as HTMLImageElement;
   const monsterName = document.getElementById('wk-monster-name') as HTMLElement;
+  const hpTextEl = document.getElementById('wk-hp-text')!;
+  const timeEl = document.getElementById('wk-time')!;
 
   // Картинка текущего монстра на экране тренировки.
   monsterImg.src = `./games/${monster.cardImage}`;
   monsterName.textContent = monster.name;
+
+  const maxHp = totalTarget(monster);
 
   // Звук урона по мобу (каждое отжимание = урон = XP).
   const hitSound = new Audio('./games/hit.mp3');
@@ -63,8 +67,20 @@ export function startWorkout(app: App): void {
   let finished = false;
   let stream: MediaStream | null = null;
 
+  // Таймер уровня (сколько заняло прохождение) — слева сверху.
+  const startMs = performance.now();
+  const fmtTime = (ms: number): string => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const timerId = window.setInterval(() => {
+    timeEl.textContent = fmtTime(performance.now() - startMs);
+  }, 250);
+  const stopTimer = () => window.clearInterval(timerId);
+
   backBtn.onclick = () => {
     finished = true;
+    stopTimer();
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
     }
@@ -75,8 +91,12 @@ export function startWorkout(app: App): void {
   const updateHud = () => {
     counterEl.textContent = String(wk.repsInSet);
     setEl.textContent =
-      monster.sets > 1 ? `Сет ${wk.setIndex + 1}/${monster.sets} · цель ${monster.repsPerSet}` : `Цель ${monster.repsPerSet}`;
-    hpEl.style.width = `${100 - progressFraction(wk, monster) * 100}%`;
+      monster.sets > 1
+        ? `Сет ${wk.setIndex + 1}/${monster.sets} · цель ${monster.repsPerSet}`
+        : `Цель ${monster.repsPerSet}`;
+    const hp = Math.max(0, maxHp - wk.totalReps);
+    hpEl.style.width = `${(hp / maxHp) * 100}%`;
+    hpTextEl.textContent = `${hp} / ${maxHp} HP`;
   };
   updateHud();
 
@@ -117,6 +137,7 @@ export function startWorkout(app: App): void {
     updateHud();
     if (res.event === 'monsterDefeated') {
       finished = true;
+      stopTimer();
       app.onDefeated();
     } else if (res.event === 'setComplete') {
       startRest();
