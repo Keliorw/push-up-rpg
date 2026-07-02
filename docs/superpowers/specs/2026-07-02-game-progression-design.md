@@ -86,7 +86,6 @@ interface Monster {
 interface Location {
   index: number;         // 1..10
   name: string;
-  nodePos: {x: number; y: number}; // доля от размера карты (0..1) — центр узла
   monsters: Monster[];   // [m1, m2, m3, boss]
   locked: boolean;       // true для 4..10 в MVP
 }
@@ -94,6 +93,9 @@ interface Location {
 
 - `MONSTER_SEQUENCE: Monster[]` — плоская последовательность из 12 монстров
   (порядок прохождения), выведенная из `LOCATIONS`.
+- `NODE_POSITIONS: {x: number; y: number}[]` — центры 10 узлов карты как доли
+  размера картинки (0..1); узел локации N = `NODE_POSITIONS[N-1]`. (Вынесено из
+  `Location` отдельным массивом — калибруется по картинке карты.)
 - Итоговая «HP» монстра = `sets * repsPerSet` (XP = число отжиманий).
 
 ## Игровая логика (юниты)
@@ -115,7 +117,8 @@ interface Location {
 ### workout (`app/src/game/workout.ts`)
 Конечный автомат одной тренировки над монстром (переиспользует события повторов
 от `RepDetector` через слой прототипа — сюда приходят «засчитан повтор»).
-- `WorkoutState { setIndex, repsInSet, done }`.
+- `WorkoutState { setIndex, repsInSet, totalReps, done }` (`totalReps` — все
+  повторы за бой = XP, для доли прогресса).
 - `newWorkout(monster): WorkoutState`.
 - `onRep(state, monster): { state, event }` — инкремент повтора; когда
   `repsInSet === repsPerSet`:
