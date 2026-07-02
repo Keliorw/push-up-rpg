@@ -1,5 +1,6 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  Image,
   Linking,
   LayoutChangeEvent,
   Pressable,
@@ -19,8 +20,18 @@ import {runOnJS} from 'react-native-worklets';
 import {useSharedValue} from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Canvas, Circle, Line} from '@shopify/react-native-skia';
-import {useWorkoutSession} from '../session/useWorkoutSession';
+import {RepDetector} from '../pose/RepDetector';
+import {DEFAULT_CONFIG} from '../pose/config';
 import {Keypoint, KP, Pose} from '../pose/types';
+import {Progression, currentMonster} from '../game/progression';
+import {
+  WorkoutState,
+  newWorkout,
+  onRep,
+  totalTarget,
+} from '../game/workout';
+import {cardImageSource} from '../assets/cardImages';
+import {playHit} from '../sound';
 
 const MODEL_PATH = require('../assets/models/movenet_lightning_int8.tflite');
 
@@ -49,9 +60,8 @@ const MIN_SCORE = 0.3;
  */
 const MIRROR_OVERLAY_X = true;
 
-/** Base (no-inset) offsets for fixed HUD chrome; see `useSafeAreaInsets` usages below. */
+/** Base (no-inset) offset for the fixed exit button; see `useSafeAreaInsets` usage below. */
 const EXIT_BUTTON_TOP = 24;
-const HUD_PADDING_TOP = 64;
 
 /** Skeleton edges: arms, head→shoulders, torso, and legs. */
 const SKELETON_EDGES: ReadonlyArray<readonly [number, number]> = [
@@ -196,14 +206,74 @@ function ExitButton({onPress}: {onPress: () => void}) {
   );
 }
 
-export function WorkoutScreen({onExit}: {onExit: () => void}) {
+function fmtTime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function WorkoutScreen({
+  progression,
+  onDefeated,
+  onExit,
+}: {
+  progression: Progression;
+  onDefeated: () => void;
+  onExit: () => void;
+}) {
   const {hasPermission, requestPermission, canRequestPermission} =
     useCameraPermission();
   const device = useCameraDevice('front');
-  const {reps, inPosition, onPose} = useWorkoutSession();
   const plugin = useTensorflowModel(MODEL_PATH, []);
   const model = plugin.state === 'loaded' ? plugin.model : undefined;
-  const insets = useSafeAreaInsets();
+
+  const monster = currentMonster(progression);
+  const wkRef = useRef<WorkoutState | null>(null);
+  if (monster && wkRef.current === null) {
+    wkRef.current = newWorkout(monster);
+  }
+  const detectorRef = useRef<RepDetector | null>(null);
+  if (detectorRef.current === null) {
+    detectorRef.current = new RepDetector(DEFAULT_CONFIG);
+  }
+  const [reps, setReps] = useState(0);
+  const [setIndex, setSetIndex] = useState(0);
+  const [hp, setHp] = useState(monster ? totalTarget(monster) : 0);
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Date.now() - startRef.current), 250);
+    return () => clearInterval(id);
+  }, []);
+
+  // Runs on the JS thread: feeds each counted rep into the game automaton
+  // (sets/HP/defeat) instead of the plain rep counter this screen used
+  // before it became the battle screen.
+  const onPose = useCallback(
+    (pose: Pose) => {
+      if (!monster || doneRef.current || wkRef.current === null) {
+        return;
+      }
+      const events = detectorRef.current!.process(pose, Date.now());
+      for (const e of events) {
+        if (e !== 'repCounted') {
+          continue;
+        }
+        const res = onRep(wkRef.current!, monster);
+        wkRef.current = res.state;
+        setReps(res.state.repsInSet);
+        setSetIndex(res.state.setIndex);
+        setHp(Math.max(0, totalTarget(monster) - res.state.totalReps));
+        playHit();
+        if (res.event === 'monsterDefeated') {
+          doneRef.current = true;
+          onDefeated();
+        }
+      }
+    },
+    [monster, onDefeated],
+  );
 
   const [overlayPose, setOverlayPose] = useState<Pose>([]);
   const [canvasSize, setCanvasSize] = useState({width: 0, height: 0});
@@ -399,22 +469,51 @@ export function WorkoutScreen({onExit}: {onExit: () => void}) {
         </Canvas>
       </View>
 
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          styles.hudRoot,
-          {paddingTop: HUD_PADDING_TOP + insets.top},
-        ]}
-        pointerEvents="none">
-        <Text style={styles.counter}>{reps}</Text>
-        {!inPosition && (
-          <View style={styles.hintBox}>
-            <Text style={styles.hintText}>Займите упор лёжа</Text>
+      {monster && (
+        <>
+          {/* TIME — слева сверху */}
+          <View style={battle.timeBox}>
+            <Text style={battle.timeLbl}>TIME</Text>
+            <Text style={battle.time}>{fmtTime(elapsed)}</Text>
           </View>
-        )}
-      </View>
-
-      <ExitButton onPress={onExit} />
+          {/* Выход — справа сверху */}
+          <Pressable style={battle.exit} onPress={onExit}>
+            <Text style={battle.exitText}>✕</Text>
+          </Pressable>
+          {/* Карточка монстра — центр сверху */}
+          <View style={battle.card} pointerEvents="none">
+            {cardImageSource(monster.cardImage) ? (
+              <Image
+                source={cardImageSource(monster.cardImage)!}
+                style={battle.cardImg}
+                resizeMode="cover"
+              />
+            ) : null}
+            <Text style={battle.cardName}>{monster.name}</Text>
+          </View>
+          {/* HP-бар */}
+          <View style={battle.hpWrap} pointerEvents="none">
+            <View
+              style={[
+                battle.hpFill,
+                {width: `${(hp / totalTarget(monster)) * 100}%`},
+              ]}
+            />
+            <Text style={battle.hpText}>
+              {hp} / {totalTarget(monster)} HP
+            </Text>
+          </View>
+          {monster.sets > 1 && (
+            <Text style={battle.setText} pointerEvents="none">
+              Сет {setIndex + 1}/{monster.sets} · цель {monster.repsPerSet}
+            </Text>
+          )}
+          {/* Золотой счётчик — снизу центр */}
+          <View style={battle.counter} pointerEvents="none">
+            <Text style={battle.counterText}>{reps}</Text>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -445,30 +544,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  hudRoot: {
-    // paddingTop is applied inline as HUD_PADDING_TOP + safe-area inset.
-    alignItems: 'center',
-  },
-  counter: {
-    color: '#F5A623',
-    fontSize: 96,
-    fontWeight: '900',
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: {width: 0, height: 2},
-    textShadowRadius: 8,
-  },
-  hintBox: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(16, 24, 40, 0.72)',
-  },
-  hintText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
   exitButton: {
     // top is applied inline as EXIT_BUTTON_TOP + safe-area inset.
     position: 'absolute',
@@ -485,4 +560,96 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+});
+
+const battle = StyleSheet.create({
+  timeBox: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(11,17,31,0.85)',
+    borderColor: '#3a4a67',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  timeLbl: {color: '#9aa4b2', fontSize: 9, letterSpacing: 2},
+  time: {color: '#fff', fontSize: 18, fontWeight: '800'},
+  exit: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11,17,31,0.85)',
+    borderColor: '#3a4a67',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exitText: {color: '#fff', fontSize: 18},
+  card: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    width: 120,
+    backgroundColor: 'rgba(11,17,31,0.85)',
+    borderColor: '#F5A623',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 6,
+    alignItems: 'center',
+  },
+  cardImg: {width: 104, height: 104, borderRadius: 6},
+  cardName: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  hpWrap: {
+    position: 'absolute',
+    top: 184,
+    alignSelf: 'center',
+    width: 200,
+    height: 20,
+    backgroundColor: '#3a0f0f',
+    borderRadius: 4,
+    borderColor: '#000',
+    borderWidth: 1,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  hpFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#d64545',
+  },
+  hpText: {color: '#fff', fontSize: 12, fontWeight: '800', textAlign: 'center'},
+  setText: {
+    position: 'absolute',
+    top: 208,
+    alignSelf: 'center',
+    color: '#F5A623',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  counter: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#F5A623',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterText: {color: '#101828', fontSize: 46, fontWeight: '900'},
 });
