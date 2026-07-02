@@ -145,8 +145,37 @@ function renderMap(app2) {
   }
 }
 
+// app/src/game/workout.ts
+function totalTarget(m) {
+  return m.sets * m.repsPerSet;
+}
+
 // web-game/src/card.ts
-function renderCard(_app) {
+function renderCard(app2) {
+  const m = currentMonster(app2.progression);
+  const img = document.getElementById("card-img");
+  const target = document.getElementById("card-target");
+  const hp = document.getElementById("card-hp");
+  const startBtn = document.getElementById("card-start-btn");
+  const hint = document.getElementById("hint");
+  if (!m) {
+    target.textContent = "\u0412\u0441\u0435 \u0432\u0440\u0430\u0433\u0438 \u043F\u043E\u0432\u0435\u0440\u0436\u0435\u043D\u044B!";
+    startBtn.style.display = "none";
+    hint.textContent = "";
+    img.removeAttribute("src");
+    return;
+  }
+  img.src = `./games/${m.cardImage}`;
+  hp.style.width = "100%";
+  target.textContent = m.kind === "boss" ? `\u0411\u041E\u0421\u0421: ${m.sets} \u043F\u043E\u0434\u0445\u043E\u0434\u0430 \xD7 ${m.repsPerSet} (\u0432\u0441\u0435\u0433\u043E ${totalTarget(m)})` : `\u041F\u043E\u0431\u0435\u0434\u0438: ${m.repsPerSet} \u043E\u0442\u0436\u0438\u043C\u0430\u043D\u0438\u0439`;
+  const locked = isLockedToday(app2.progression, todayISO());
+  if (locked) {
+    startBtn.style.display = "none";
+    hint.textContent = "\u0422\u0440\u0435\u043D\u0438\u0440\u043E\u0432\u043A\u0430 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u2014 \u043F\u0440\u0438\u0445\u043E\u0434\u0438 \u0437\u0430\u0432\u0442\u0440\u0430.";
+  } else {
+    startBtn.style.display = "";
+    hint.textContent = "";
+  }
 }
 
 // web-game/src/workout-screen.ts
