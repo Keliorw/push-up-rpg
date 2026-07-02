@@ -9,6 +9,8 @@ const CFG = {
   angleSmoothing: 1,
   descentSmoothing: 1,
   baselineRelaxAlpha: 0,
+  positionHoldMs: 1000,
+  gateLostGraceMs: 0,
 };
 
 function blankPose(): Pose {
@@ -134,6 +136,20 @@ test('запасной гейт: без ног считает по углу ло
   expect(d.debug.gateMode).toBe('fallback');
   expect(d.process(armPose(80), 1400)).toEqual([]); // локоть согнут → вниз
   expect(d.process(armPose(170), 2200)).toEqual(['repCounted']); // разогнут → повтор
+});
+
+test('кратковременная пропажа точек не рвёт позицию (grace), долгая — рвёт', () => {
+  const d = new RepDetector({...CFG, gateLostGraceMs: 700});
+  d.process(bodyPose(0.3), 0);
+  expect(d.process(bodyPose(0.3), 1000)).toEqual(['positionAcquired']);
+  // один «пустой» кадр внутри grace-окна — без positionLost
+  expect(d.process(blankPose(), 1200)).toEqual([]);
+  // позиция сохранилась, повтор по проседанию продолжает считаться
+  expect(d.process(bodyPose(0.45), 1400)).toEqual([]); // вниз
+  expect(d.process(bodyPose(0.3), 2200)).toEqual(['repCounted']); // вверх
+  // пропажа дольше grace (>700 мс от 2200) — позиция теряется
+  d.process(blankPose(), 2300);
+  expect(d.process(blankPose(), 3100)).toEqual(['positionLost']);
 });
 
 test('запасной гейт работает и по одной видимой руке', () => {

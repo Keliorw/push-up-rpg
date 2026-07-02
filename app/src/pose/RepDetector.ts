@@ -44,6 +44,7 @@ export class RepDetector {
   private state: State = 'noPosition';
   private holdStartMs = 0;
   private lastRepMs = Number.NEGATIVE_INFINITY;
+  private lastGoodMs = Number.NEGATIVE_INFINITY;
 
   private smoothedElbow: number | null = null;
   private smoothedDescent = 0;
@@ -66,8 +67,17 @@ export class RepDetector {
     this.debug.torsoAngle = gate.torsoAngle;
 
     if (!gate.inPosition) {
+      // Кратковременная пропажа точек во время движения не должна рвать позицию:
+      // «коастим» на протяжении grace-окна, сохраняя состояние и базовую линию.
+      if (
+        this.state !== 'noPosition' &&
+        tMs - this.lastGoodMs <= this.cfg.gateLostGraceMs
+      ) {
+        return [];
+      }
       return this.dropPosition();
     }
+    this.lastGoodMs = tMs;
 
     const elbow = this.updateElbow(pose);
     const descent = this.updateDescent(pose);

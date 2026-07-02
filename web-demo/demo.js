@@ -1,7 +1,8 @@
 // app/src/pose/config.ts
 var DEFAULT_CONFIG = {
   minKeypointScore: 0.3,
-  positionHoldMs: 1e3,
+  positionHoldMs: 400,
+  gateLostGraceMs: 700,
   minRepDurationMs: 700,
   plankBodyMinAngleDeg: 140,
   descentDownFrac: 0.14,
@@ -61,6 +62,7 @@ var RepDetector = class {
   state = "noPosition";
   holdStartMs = 0;
   lastRepMs = Number.NEGATIVE_INFINITY;
+  lastGoodMs = Number.NEGATIVE_INFINITY;
   smoothedElbow = null;
   smoothedDescent = 0;
   baselineTopY = null;
@@ -77,8 +79,12 @@ var RepDetector = class {
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
     if (!gate.inPosition) {
+      if (this.state !== "noPosition" && tMs - this.lastGoodMs <= this.cfg.gateLostGraceMs) {
+        return [];
+      }
       return this.dropPosition();
     }
+    this.lastGoodMs = tMs;
     const elbow = this.updateElbow(pose);
     const descent = this.updateDescent(pose);
     this.debug.elbowAngle = elbow;

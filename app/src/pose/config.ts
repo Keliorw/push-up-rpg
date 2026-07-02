@@ -3,6 +3,12 @@ export interface DetectorConfig {
   minKeypointScore: number;
   /** Сколько мс поза должна стабильно держаться до positionAcquired. */
   positionHoldMs: number;
+  /**
+   * Сколько мс терпеть кратковременную потерю позиции (пропажу точек во время
+   * движения), НЕ сбрасывая состояние. Без этого каждый «моргнувший» кадр
+   * рвал бы позицию и перезапускал удержание — и реальные повторы не считались.
+   */
+  gateLostGraceMs: number;
   /** Минимум мс между засчитанными повторами (защита от дребезга). */
   minRepDurationMs: number;
 
@@ -39,7 +45,8 @@ export interface DetectorConfig {
 
 export const DEFAULT_CONFIG: DetectorConfig = {
   minKeypointScore: 0.3,
-  positionHoldMs: 1000,
+  positionHoldMs: 400,
+  gateLostGraceMs: 700,
   minRepDurationMs: 700,
 
   plankBodyMinAngleDeg: 140,
