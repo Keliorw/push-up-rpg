@@ -179,6 +179,15 @@ function loadProgression() {
 function saveProgression(p) {
   localStorage.setItem(KEY, JSON.stringify(p));
 }
+var XP_KEY = "pushuprpg.totalReps";
+function loadTotalReps() {
+  const raw = localStorage.getItem(XP_KEY);
+  const n = raw != null ? Number(raw) : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+function saveTotalReps(n) {
+  localStorage.setItem(XP_KEY, String(Math.max(0, Math.floor(n))));
+}
 
 // web-game/src/map.ts
 function currentLocationIndex(app3) {
@@ -696,6 +705,7 @@ function startWorkout(app3) {
     }
     const res = onRep(wk, monster);
     wk = res.state;
+    app3.addRep();
     updateHud();
     if (res.event === "monsterDefeated") {
       finished = true;
@@ -880,24 +890,33 @@ import {
   doc,
   getDoc,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 async function loadRemote(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
   const d = snap.data();
   return {
-    defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
-    lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
+    progression: {
+      defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
+      lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
+    },
+    totalReps: typeof d.totalReps === "number" ? d.totalReps : 0
   };
 }
-async function saveRemote(uid, p, nickname) {
+async function saveRemote(uid, profile, nickname) {
   await setDoc(
     doc(db, "users", uid),
     {
       nickname,
-      defeatedCount: p.defeatedCount,
-      lastWorkoutDate: p.lastWorkoutDate,
+      defeatedCount: profile.progression.defeatedCount,
+      lastWorkoutDate: profile.progression.lastWorkoutDate,
+      totalReps: profile.totalReps,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -914,6 +933,12 @@ function mergeProgress(a, b) {
   return {
     defeatedCount: Math.max(a.defeatedCount, b.defeatedCount),
     lastWorkoutDate: latestDate(a.lastWorkoutDate, b.lastWorkoutDate)
+  };
+}
+function mergeProfile(a, b) {
+  return {
+    progression: mergeProgress(a.progression, b.progression),
+    totalReps: Math.max(a.totalReps, b.totalReps)
   };
 }
 
@@ -996,6 +1021,7 @@ function showSyncWarning() {
 }
 var app2 = {
   progression: loadProgression(),
+  totalReps: loadTotalReps(),
   show,
   render() {
     renderMap(this);
@@ -1008,12 +1034,17 @@ var app2 = {
     show("screen-workout");
     startWorkout(this);
   },
+  addRep() {
+    this.totalReps += 1;
+    saveTotalReps(this.totalReps);
+  },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
     if (currentUser) {
-      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
+      const profile = { progression: this.progression, totalReps: this.totalReps };
+      saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
     }
     document.getElementById("victory-name").textContent = m ? m.name : "";
     const next = currentMonster(this.progression);
@@ -1088,16 +1119,18 @@ onUser(async (user) => {
     show("screen-auth");
     return;
   }
-  const local = loadProgression();
+  const local = { progression: loadProgression(), totalReps: loadTotalReps() };
   let remote = null;
   try {
     remote = await loadRemote(user.uid);
   } catch {
     showSyncWarning();
   }
-  const merged = remote ? mergeProgress(local, remote) : local;
-  app2.progression = merged;
-  saveProgression(merged);
+  const merged = remote ? mergeProfile(local, remote) : local;
+  app2.progression = merged.progression;
+  app2.totalReps = merged.totalReps;
+  saveProgression(merged.progression);
+  saveTotalReps(merged.totalReps);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show("screen-start");

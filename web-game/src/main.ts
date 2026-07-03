@@ -10,7 +10,8 @@ import {renderCard} from './card';
 import {startWorkout} from './workout-screen';
 import {onUser, logout, GameUser} from './auth';
 import {loadRemote, saveRemote} from './remote-storage';
-import {mergeProgress} from './sync';
+import {mergeProfile, Profile} from './sync';
+import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
 
 export type ScreenId =
@@ -23,10 +24,12 @@ export type ScreenId =
 
 export interface App {
   progression: Progression;
+  totalReps: number;
   show(id: ScreenId): void;
   render(): void;
   goCard(): void;
   goWorkout(): void;
+  addRep(): void; // +1 XP за отжимание (локально)
   onDefeated(): void; // called by the workout screen on monster defeat
 }
 
@@ -73,6 +76,7 @@ function showSyncWarning(): void {
 
 const app: App = {
   progression: loadProgression(),
+  totalReps: loadTotalReps(),
   show,
   render() {
     renderMap(this);
@@ -85,15 +89,19 @@ const app: App = {
     show('screen-workout');
     startWorkout(this);
   },
+  addRep() {
+    this.totalReps += 1;
+    saveTotalReps(this.totalReps);
+  },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
     if (currentUser) {
-      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
+      const profile: Profile = {progression: this.progression, totalReps: this.totalReps};
+      saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
     }
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
-    // «Следующий монстр» показываем только если ещё есть кого бить.
     const next = currentMonster(this.progression);
     (document.getElementById('victory-next') as HTMLElement).style.display = next ? '' : 'none';
     show('screen-victory');
@@ -188,16 +196,18 @@ onUser(async user => {
   }
   // Вошли: тянем облако, мёржим с локальным (прогресс не откатывается),
   // пишем результат в оба хранилища.
-  const local = loadProgression();
-  let remote = null;
+  const local: Profile = {progression: loadProgression(), totalReps: loadTotalReps()};
+  let remote: Profile | null = null;
   try {
     remote = await loadRemote(user.uid);
   } catch {
     showSyncWarning();
   }
-  const merged = remote ? mergeProgress(local, remote) : local;
-  app.progression = merged;
-  saveProgression(merged);
+  const merged = remote ? mergeProfile(local, remote) : local;
+  app.progression = merged.progression;
+  app.totalReps = merged.totalReps;
+  saveProgression(merged.progression);
+  saveTotalReps(merged.totalReps);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show('screen-start');

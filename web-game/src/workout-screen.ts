@@ -134,6 +134,7 @@ export function startWorkout(app: App): void {
     }
     const res = onRep(wk, monster);
     wk = res.state;
+    app.addRep();
     updateHud();
     if (res.event === 'monsterDefeated') {
       finished = true;
