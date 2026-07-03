@@ -103,12 +103,23 @@ if (menuVids.length === 2) {
     v.loop = false;
     v.addEventListener('ended', advance);
   });
-  const start = () => {
-    menuVids[0].classList.add('ready');
-    void menuVids[0].play().catch(() => {});
+  const first = menuVids[0];
+  // Проявляем видео, как только оно РЕАЛЬНО пошло. На мобильных браузерах
+  // canplaythrough часто не срабатывает (нет предзагрузки), поэтому ловим
+  // 'playing' / первый 'timeupdate' — они наступают, когда кадры уже идут.
+  const reveal = () => first.classList.add('ready');
+  first.addEventListener('playing', reveal, {once: true});
+  first.addEventListener('timeupdate', reveal, {once: true});
+  // Пытаемся запустить сразу (muted-видео можно проигрывать программно).
+  const tryPlay = () => {
+    void first.play().catch(() => {});
   };
-  if (menuVids[0].readyState >= 3) start();
-  else menuVids[0].addEventListener('canplaythrough', start, {once: true});
+  tryPlay();
+  // Запасной вариант для мобильных: если автоплей заблокирован политикой,
+  // стартуем по первому касанию/клику пользователя.
+  const kick = () => tryPlay();
+  document.addEventListener('touchstart', kick, {once: true, passive: true});
+  document.addEventListener('click', kick, {once: true});
 }
 // VICTORY -> map
 document.getElementById('victory-btn')!.addEventListener('click', () => {

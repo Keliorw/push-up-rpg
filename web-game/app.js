@@ -813,13 +813,18 @@ if (menuVids.length === 2) {
     v.loop = false;
     v.addEventListener("ended", advance);
   });
-  const start = () => {
-    menuVids[0].classList.add("ready");
-    void menuVids[0].play().catch(() => {
+  const first = menuVids[0];
+  const reveal = () => first.classList.add("ready");
+  first.addEventListener("playing", reveal, { once: true });
+  first.addEventListener("timeupdate", reveal, { once: true });
+  const tryPlay = () => {
+    void first.play().catch(() => {
     });
   };
-  if (menuVids[0].readyState >= 3) start();
-  else menuVids[0].addEventListener("canplaythrough", start, { once: true });
+  tryPlay();
+  const kick = () => tryPlay();
+  document.addEventListener("touchstart", kick, { once: true, passive: true });
+  document.addEventListener("click", kick, { once: true });
 }
 document.getElementById("victory-btn").addEventListener("click", () => {
   stopVictory();
