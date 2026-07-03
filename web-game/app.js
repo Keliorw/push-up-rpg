@@ -831,3 +831,4 @@ document.getElementById("card-back-btn").addEventListener("click", () => {
   show("screen-map");
 });
 document.getElementById("card-start-btn").addEventListener("click", () => app.goWorkout());
+document.getElementById("map-back").addEventListener("click", () => show("screen-start"));
