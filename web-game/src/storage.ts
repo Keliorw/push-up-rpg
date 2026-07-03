@@ -29,3 +29,15 @@ export function saveProgression(p: Progression): void {
 export function resetProgression(): void {
   localStorage.removeItem(KEY);
 }
+
+const XP_KEY = 'pushuprpg.totalReps';
+
+export function loadTotalReps(): number {
+  const raw = localStorage.getItem(XP_KEY);
+  const n = raw != null ? Number(raw) : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
+export function saveTotalReps(n: number): void {
+  localStorage.setItem(XP_KEY, String(Math.max(0, Math.floor(n))));
+}
