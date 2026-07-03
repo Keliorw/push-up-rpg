@@ -784,6 +784,8 @@ var app = {
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
     document.getElementById("victory-name").textContent = m ? m.name : "";
+    const next = currentMonster(this.progression);
+    document.getElementById("victory-next").style.display = next ? "" : "none";
     show("screen-victory");
     playVictory();
   }
@@ -821,7 +823,12 @@ if (menuVids.length === 2) {
   if (menuVids[0].readyState >= 3) start();
   else menuVids[0].addEventListener("canplaythrough", start, { once: true });
 }
-document.getElementById("victory-btn").addEventListener("click", () => {
+document.getElementById("victory-next").addEventListener("click", () => {
+  stopVictory();
+  app.render();
+  app.goCard();
+});
+document.getElementById("victory-map").addEventListener("click", () => {
   stopVictory();
   app.render();
   show("screen-map");
