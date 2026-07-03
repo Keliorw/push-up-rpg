@@ -788,10 +788,39 @@ var app = {
     playVictory();
   }
 };
-document.getElementById("start-btn").addEventListener("click", () => {
+document.getElementById("btn-campaign").addEventListener("click", () => {
   app.render();
   show("screen-map");
 });
+var menuVids = [
+  document.getElementById("menu-bg-video"),
+  document.getElementById("menu-bg-video-b")
+].filter(Boolean);
+if (menuVids.length === 2) {
+  let active = 0;
+  const advance = () => {
+    const incoming = menuVids[active ^ 1];
+    const outgoing = menuVids[active];
+    incoming.classList.add("ready");
+    void incoming.play().catch(() => {
+    });
+    outgoing.classList.remove("ready");
+    active ^= 1;
+    outgoing.pause();
+    outgoing.currentTime = 0;
+  };
+  menuVids.forEach((v) => {
+    v.loop = false;
+    v.addEventListener("ended", advance);
+  });
+  const start = () => {
+    menuVids[0].classList.add("ready");
+    void menuVids[0].play().catch(() => {
+    });
+  };
+  if (menuVids[0].readyState >= 3) start();
+  else menuVids[0].addEventListener("canplaythrough", start, { once: true });
+}
 document.getElementById("victory-btn").addEventListener("click", () => {
   stopVictory();
   app.render();
@@ -802,3 +831,4 @@ document.getElementById("card-back-btn").addEventListener("click", () => {
   show("screen-map");
 });
 document.getElementById("card-start-btn").addEventListener("click", () => app.goWorkout());
+document.getElementById("map-back").addEventListener("click", () => show("screen-start"));
