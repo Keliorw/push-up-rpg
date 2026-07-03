@@ -88,12 +88,6 @@
       /* VICTORY */
       #screen-victory { text-align: center; padding-top: 30vh; }
       #screen-victory h1 { color: #F5A623; font-size: 40px; font-weight: 900; }
-      /* DEV */
-      #dev { position: fixed; bottom: 0; left: 0; right: 0; background: #0b111f;
-        font-size: 12px; padding: 6px; display: flex; gap: 6px; flex-wrap: wrap;
-        justify-content: center; opacity: .9; }
-      #dev button { background: #24314a; color: #fff; border: 1px solid #3a4a67;
-        border-radius: 6px; padding: 4px 8px; }
       #hint { font-size: 14px; color: #9aa4b2; }
     </style>
   </head>
@@ -146,14 +140,6 @@
         <div id="victory-name"></div>
         <button class="btn" id="victory-btn" style="margin-top:24px">На карту</button>
       </section>
-    </div>
-
-    <div id="dev">
-      <span>DEV:</span>
-      <button id="dev-reset-day">сбросить день</button>
-      <button id="dev-reset-progress">сбросить прогресс</button>
-      <button id="dev-prev">◀ монстр</button>
-      <button id="dev-next">монстр ▶</button>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>

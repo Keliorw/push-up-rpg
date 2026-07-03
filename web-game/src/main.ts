@@ -1,12 +1,10 @@
-import {MONSTER_SEQUENCE} from '../../app/src/game/monsters';
 import {
-  INITIAL_PROGRESSION,
   Progression,
   currentMonster,
   defeatMonster,
 } from '../../app/src/game/progression';
 import {todayISO} from './dates';
-import {loadProgression, resetProgression, saveProgression} from './storage';
+import {loadProgression, saveProgression} from './storage';
 import {renderMap} from './map';
 import {renderCard} from './card';
 import {startWorkout} from './workout-screen';
@@ -90,31 +88,3 @@ document.getElementById('card-back-btn')!.addEventListener('click', () => {
   show('screen-map');
 });
 document.getElementById('card-start-btn')!.addEventListener('click', () => app.goWorkout());
-
-// DEV panel
-document.getElementById('dev-reset-day')!.addEventListener('click', () => {
-  app.progression = {...app.progression, lastWorkoutDate: null};
-  saveProgression(app.progression);
-  app.render();
-});
-document.getElementById('dev-reset-progress')!.addEventListener('click', () => {
-  resetProgression();
-  app.progression = INITIAL_PROGRESSION;
-  app.render();
-});
-document.getElementById('dev-prev')!.addEventListener('click', () => {
-  app.progression = {
-    ...app.progression,
-    defeatedCount: Math.max(0, app.progression.defeatedCount - 1),
-  };
-  saveProgression(app.progression);
-  app.render();
-});
-document.getElementById('dev-next')!.addEventListener('click', () => {
-  app.progression = {
-    ...app.progression,
-    defeatedCount: Math.min(MONSTER_SEQUENCE.length, app.progression.defeatedCount + 1),
-  };
-  saveProgression(app.progression);
-  app.render();
-});
