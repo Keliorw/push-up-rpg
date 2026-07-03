@@ -46,7 +46,15 @@ export function logout(): Promise<void> {
 
 export function onUser(cb: (user: GameUser | null) => void): void {
   onAuthStateChanged(auth, u => {
-    cb(u ? {uid: u.uid, nickname: u.displayName ?? ''} : null);
+    if (!u) {
+      cb(null);
+      return;
+    }
+    // displayName может быть ещё не установлен в момент регистрации (гонка с
+    // updateProfile), поэтому надёжный фолбэк — ник из технического e-mail,
+    // который доступен сразу. Иначе в Firestore уйдёт пустой ник.
+    const nickname = u.displayName || (u.email ? u.email.split('@')[0] : '');
+    cb({uid: u.uid, nickname});
   });
 }
 

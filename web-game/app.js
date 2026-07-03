@@ -816,7 +816,12 @@ function logout() {
 }
 function onUser(cb) {
   onAuthStateChanged(auth, (u) => {
-    cb(u ? { uid: u.uid, nickname: u.displayName ?? "" } : null);
+    if (!u) {
+      cb(null);
+      return;
+    }
+    const nickname = u.displayName || (u.email ? u.email.split("@")[0] : "");
+    cb({ uid: u.uid, nickname });
   });
 }
 function authErrorText(e) {
@@ -891,10 +896,12 @@ function initAuthScreen() {
   const err = el("auth-error");
   const toggle = el("auth-toggle");
   const title = el("auth-title");
+  const submitLabel = submit.querySelector("span");
+  const toggleLabel = toggle.querySelector("span");
   function applyMode() {
     title.textContent = mode === "login" ? "\u0412\u0445\u043E\u0434" : "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044F";
-    submit.textContent = mode === "login" ? "\u0412\u043E\u0439\u0442\u0438" : "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0430\u043A\u043A\u0430\u0443\u043D\u0442";
-    toggle.textContent = mode === "login" ? "\u041D\u0435\u0442 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430? \u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044F" : "\u0423\u0436\u0435 \u0435\u0441\u0442\u044C \u0430\u043A\u043A\u0430\u0443\u043D\u0442? \u0412\u043E\u0439\u0442\u0438";
+    submitLabel.textContent = mode === "login" ? "\u0412\u043E\u0439\u0442\u0438" : "\u0421\u043E\u0437\u0434\u0430\u0442\u044C";
+    toggleLabel.textContent = mode === "login" ? "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044F" : "\u0412\u043E\u0439\u0442\u0438";
     err.textContent = "";
   }
   toggle.addEventListener("click", () => {

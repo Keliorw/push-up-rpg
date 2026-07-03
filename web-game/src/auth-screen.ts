@@ -14,13 +14,14 @@ export function initAuthScreen(): void {
   const err = el('auth-error');
   const toggle = el('auth-toggle');
   const title = el('auth-title');
+  // Текст лежит в <span> кнопок-картинок (у них стилизуется именно span).
+  const submitLabel = submit.querySelector('span') as HTMLElement;
+  const toggleLabel = toggle.querySelector('span') as HTMLElement;
 
   function applyMode(): void {
     title.textContent = mode === 'login' ? 'Вход' : 'Регистрация';
-    submit.textContent = mode === 'login' ? 'Войти' : 'Создать аккаунт';
-    toggle.textContent = mode === 'login'
-      ? 'Нет аккаунта? Регистрация'
-      : 'Уже есть аккаунт? Войти';
+    submitLabel.textContent = mode === 'login' ? 'Войти' : 'Создать';
+    toggleLabel.textContent = mode === 'login' ? 'Регистрация' : 'Войти';
     err.textContent = '';
   }
 
