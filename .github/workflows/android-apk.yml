@@ -19,14 +19,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle          # кэширует ~/.gradle (зависимости, wrapper, build-cache)
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm             # кэширует загрузки npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Cache Android NDK & cmake
+        uses: actions/cache@v4
+        with:
+          # NDK 27.1 весит ~1 ГБ — кэш убирает его повторную загрузку.
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
+            ${{ env.ANDROID_HOME }}/cmake
+          key: android-ndk-27.1.12297006-cmake-3.22.1
 
       - name: Install SDK packages (platform 36, build-tools, NDK, cmake)
         run: |
@@ -46,7 +58,7 @@ jobs:
         working-directory: app/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace --build-cache
 
       - name: Upload APK
         if: success()
