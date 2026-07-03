@@ -66,6 +66,9 @@ const app: App = {
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
+    // «Следующий монстр» показываем только если ещё есть кого бить.
+    const next = currentMonster(this.progression);
+    (document.getElementById('victory-next') as HTMLElement).style.display = next ? '' : 'none';
     show('screen-victory');
     playVictory();
   },
@@ -121,8 +124,13 @@ if (menuVids.length === 2) {
   document.addEventListener('touchstart', kick, {once: true, passive: true});
   document.addEventListener('click', kick, {once: true});
 }
-// VICTORY -> map
-document.getElementById('victory-btn')!.addEventListener('click', () => {
+// VICTORY: сразу к следующему монстру (его превью) или выйти на карту.
+document.getElementById('victory-next')!.addEventListener('click', () => {
+  stopVictory();
+  app.render(); // обновить прогресс на карте (на фоне)
+  app.goCard(); // превью следующего монстра
+});
+document.getElementById('victory-map')!.addEventListener('click', () => {
   stopVictory();
   app.render();
   show('screen-map');

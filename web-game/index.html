@@ -145,8 +145,11 @@
       #wk-rest { position: absolute; inset: 0; display: none; align-items: center;
         justify-content: center; flex-direction: column; background: rgba(0,0,0,.8); font-size: 24px; pointer-events: auto; }
       /* VICTORY */
-      #screen-victory { text-align: center; padding-top: 30vh; }
+      #screen-victory { text-align: center; padding-top: 26vh; }
       #screen-victory h1 { color: #F5A623; font-size: 40px; font-weight: 900; }
+      #victory-actions { display: flex; flex-direction: column; align-items: center;
+        gap: 12px; margin-top: 28px; }
+      #victory-map { background: #24314a; color: #fff; }
       #hint { font-size: 14px; color: #9aa4b2; }
     </style>
   </head>
@@ -219,7 +222,10 @@
       <section id="screen-victory" class="screen">
         <h1>Повержен!</h1>
         <div id="victory-name"></div>
-        <button class="btn" id="victory-btn" style="margin-top:24px">На карту</button>
+        <div id="victory-actions">
+          <button class="btn" id="victory-next">Следующий монстр</button>
+          <button class="btn" id="victory-map">На карту</button>
+        </div>
       </section>
     </div>
 
