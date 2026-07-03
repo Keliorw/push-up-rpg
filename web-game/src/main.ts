@@ -13,9 +13,12 @@ import {loadRemote, saveRemote} from './remote-storage';
 import {mergeProfile, Profile} from './sync';
 import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
+import {openArena} from './arena-screen';
 
 export type ScreenId =
   | 'screen-auth'
+  | 'screen-loading'
+  | 'screen-arena'
   | 'screen-start'
   | 'screen-map'
   | 'screen-card'
@@ -109,11 +112,17 @@ const app: App = {
   },
 };
 
-// MAIN MENU: «Кампания» -> карта (как раньше START). «Arena» пока не активна.
+// MAIN MENU: «Кампания» -> карта (как раньше START).
 document.getElementById('btn-campaign')!.addEventListener('click', () => {
   app.render();
   show('screen-map');
 });
+
+// MAIN MENU: «Arena» -> рейтинг
+document.getElementById('btn-arena')!.addEventListener('click', () => {
+  void openArena(currentUser ? currentUser.uid : null);
+});
+document.getElementById('arena-back')!.addEventListener('click', () => show('screen-start'));
 
 // Анимированный фон меню: статичная картинка -> видео, когда догрузится.
 // Бесшовный цикл через два ролика (double-buffer): пока играет активный,

@@ -922,6 +922,21 @@ async function saveRemote(uid, profile, nickname) {
     { merge: true }
   );
 }
+async function loadLeaderboard(max) {
+  const q = query(collection(db, "users"), orderBy("defeatedCount", "desc"), limit(max));
+  const snap = await getDocs(q);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    const d = docSnap.data();
+    rows.push({
+      uid: docSnap.id,
+      nickname: typeof d.nickname === "string" && d.nickname ? d.nickname : "\u2014",
+      defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
+      totalReps: typeof d.totalReps === "number" ? d.totalReps : 0
+    });
+  });
+  return rows;
+}
 
 // web-game/src/sync.ts
 function latestDate(a, b) {
@@ -983,6 +998,45 @@ function initAuthScreen() {
 function revealAuthForm() {
   el("auth-loading").style.display = "none";
   el("auth-form").style.display = "block";
+}
+
+// web-game/src/levels.ts
+function locationLabel(defeatedCount) {
+  const m = MONSTER_SEQUENCE[defeatedCount];
+  if (!m) return { index: null, name: "\u041A\u0430\u043C\u043F\u0430\u043D\u0438\u044F \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u0430" };
+  const match = /^loc(\d+)-/.exec(m.id);
+  const index = match ? Number(match[1]) : null;
+  const loc = index != null ? LOCATIONS.find((l) => l.index === index) : void 0;
+  return { index, name: loc ? loc.name : `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${index ?? "?"}` };
+}
+
+// web-game/src/arena-screen.ts
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+function rowHtml(row, rank, isMe) {
+  const loc = locationLabel(row.defeatedCount);
+  const locText = loc.index != null ? `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${loc.index} \xB7 ${esc(loc.name)}` : esc(loc.name);
+  return `<div class="arena-row${isMe ? " me" : ""}"><div class="rank">${rank}</div><div class="who"><b>${esc(row.nickname)}</b><span>${locText}</span></div><div class="xp">${row.totalReps} XP</div></div>`;
+}
+async function openArena(currentUid) {
+  const list = document.getElementById("arena-list");
+  list.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026";
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  document.getElementById("screen-arena").classList.add("active");
+  try {
+    const rows = await loadLeaderboard(50);
+    rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps);
+    if (rows.length === 0) {
+      list.innerHTML = '<div id="arena-empty">\u041F\u043E\u043A\u0430 \u043D\u0438\u043A\u0442\u043E \u043D\u0435 \u0438\u0433\u0440\u0430\u043B</div>';
+      return;
+    }
+    list.innerHTML = rows.map((r, i) => rowHtml(r, i + 1, r.uid === currentUid)).join("");
+  } catch {
+    list.innerHTML = '<div id="arena-empty">\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0435\u0439\u0442\u0438\u043D\u0433</div>';
+  }
 }
 
 // web-game/src/main.ts
@@ -1057,6 +1111,10 @@ document.getElementById("btn-campaign").addEventListener("click", () => {
   app2.render();
   show("screen-map");
 });
+document.getElementById("btn-arena").addEventListener("click", () => {
+  void openArena(currentUser ? currentUser.uid : null);
+});
+document.getElementById("arena-back").addEventListener("click", () => show("screen-start"));
 var menuVids = [
   document.getElementById("menu-bg-video"),
   document.getElementById("menu-bg-video-b")

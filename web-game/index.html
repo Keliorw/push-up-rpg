@@ -176,6 +176,19 @@
         display: flex; align-items: center; gap: 8px; background: rgba(11,17,31,.8);
         border: 1px solid #3a4a67; border-radius: 20px; padding: 4px 6px 4px 12px; }
       #account-nick { font-size: 13px; font-weight: 700; color: #fff; }
+      /* ARENA */
+      #screen-arena { min-height: 100vh; background: #101828; }
+      #arena-box { max-width: 480px; margin: 0 auto; padding: 16px; }
+      #arena-box h1 { color: #F5A623; text-align: center; font-size: 26px; margin: 8px 0 16px; }
+      .arena-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center;
+        padding: 10px 12px; border-bottom: 1px solid #24314a; font-size: 14px; }
+      .arena-row .rank { color: #9aa4b2; font-weight: 800; text-align: right; }
+      .arena-row .who { display: flex; flex-direction: column; }
+      .arena-row .who b { color: #fff; }
+      .arena-row .who span { color: #9aa4b2; font-size: 12px; }
+      .arena-row .xp { color: #F5A623; font-weight: 800; white-space: nowrap; }
+      .arena-row.me { background: rgba(245,166,35,.14); border-radius: 8px; }
+      #arena-empty { color: #9aa4b2; text-align: center; padding: 24px; }
     </style>
   </head>
   <body>
@@ -261,6 +274,14 @@
           <div id="wk-counter">0</div>
         </div>
         <div id="wk-rest"></div>
+      </section>
+
+      <section id="screen-arena" class="screen">
+        <div id="arena-box">
+          <button id="arena-back" class="link-btn">← В меню</button>
+          <h1>Рейтинг</h1>
+          <div id="arena-list">Загрузка…</div>
+        </div>
       </section>
 
       <section id="screen-victory" class="screen">
