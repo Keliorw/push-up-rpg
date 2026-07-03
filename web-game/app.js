@@ -179,9 +179,6 @@ function loadProgression() {
 function saveProgression(p) {
   localStorage.setItem(KEY, JSON.stringify(p));
 }
-function resetProgression() {
-  localStorage.removeItem(KEY);
-}
 
 // web-game/src/map.ts
 function currentLocationIndex(app2) {
@@ -805,29 +802,3 @@ document.getElementById("card-back-btn").addEventListener("click", () => {
   show("screen-map");
 });
 document.getElementById("card-start-btn").addEventListener("click", () => app.goWorkout());
-document.getElementById("dev-reset-day").addEventListener("click", () => {
-  app.progression = { ...app.progression, lastWorkoutDate: null };
-  saveProgression(app.progression);
-  app.render();
-});
-document.getElementById("dev-reset-progress").addEventListener("click", () => {
-  resetProgression();
-  app.progression = INITIAL_PROGRESSION;
-  app.render();
-});
-document.getElementById("dev-prev").addEventListener("click", () => {
-  app.progression = {
-    ...app.progression,
-    defeatedCount: Math.max(0, app.progression.defeatedCount - 1)
-  };
-  saveProgression(app.progression);
-  app.render();
-});
-document.getElementById("dev-next").addEventListener("click", () => {
-  app.progression = {
-    ...app.progression,
-    defeatedCount: Math.min(MONSTER_SEQUENCE.length, app.progression.defeatedCount + 1)
-  };
-  saveProgression(app.progression);
-  app.render();
-});
