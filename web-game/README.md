@@ -13,6 +13,9 @@ python3 -m http.server 8081
 Открой http://localhost:8081/ . При первом входе — регистрация (логин + пароль);
 прогресс сохраняется в аккаунт и синхронизируется между устройствами.
 
+На главном экране кнопка Arena открывает рейтинг (локация + XP). Модель MoveNet
+предзагружается после входа; бой открывается через экран загрузки.
+
 Требуется настроенный проект Firebase (Auth Email/Password + Firestore) и
 заполненный `web-game/src/firebase.ts`. Подробности —
 `docs/superpowers/plans/2026-07-03-web-accounts-cloud-progress.md` (Task 0).
