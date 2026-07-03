@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mergeProgress} from './sync.ts';
+import {mergeProgress, mergeProfile} from './sync.ts';
 
 test('берёт больший defeatedCount', () => {
   assert.deepEqual(
@@ -39,5 +39,15 @@ test('обе даты null → null', () => {
       {defeatedCount: 0, lastWorkoutDate: null},
     ).lastWorkoutDate,
     null,
+  );
+});
+
+test('mergeProfile: прогресс и XP не откатываются', () => {
+  assert.deepEqual(
+    mergeProfile(
+      {progression: {defeatedCount: 3, lastWorkoutDate: '2026-07-01'}, totalReps: 120},
+      {progression: {defeatedCount: 5, lastWorkoutDate: '2026-06-30'}, totalReps: 90},
+    ),
+    {progression: {defeatedCount: 5, lastWorkoutDate: '2026-07-01'}, totalReps: 120},
   );
 });

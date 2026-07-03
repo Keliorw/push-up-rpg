@@ -17,3 +17,16 @@ export function mergeProgress(a: Progression, b: Progression): Progression {
     lastWorkoutDate: latestDate(a.lastWorkoutDate, b.lastWorkoutDate),
   };
 }
+
+export interface Profile {
+  progression: Progression;
+  totalReps: number;
+}
+
+/** Объединяет полный профиль (прогресс + XP), ничего не откатывая. */
+export function mergeProfile(a: Profile, b: Profile): Profile {
+  return {
+    progression: mergeProgress(a.progression, b.progression),
+    totalReps: Math.max(a.totalReps, b.totalReps),
+  };
+}
