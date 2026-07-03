@@ -151,11 +151,49 @@
         gap: 12px; margin-top: 28px; }
       #victory-map { background: #24314a; color: #fff; }
       #hint { font-size: 14px; color: #9aa4b2; }
+      /* AUTH — фон главного меню + кнопки-картинки */
+      #screen-auth.active { display: flex; align-items: center; justify-content: center;
+        min-height: 100vh; padding: 24px; position: relative; overflow: hidden; }
+      #auth-bg { position: absolute; inset: 0; z-index: 0; background: #101828; }
+      #auth-bg-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #auth-box { position: relative; z-index: 1; width: 100%; max-width: 360px; text-align: center;
+        background: rgba(11,17,31,.72); border: 1px solid #3a4a67; border-radius: 16px; padding: 26px 20px; }
+      #auth-loading { color: #e6e0cf; font-size: 16px; }
+      #auth-form h1 { color: #F5A623; font-size: 28px; margin: 0 0 18px; text-shadow: 0 2px 6px #000; }
+      #auth-form input { display: block; width: 100%; margin: 0 0 12px; padding: 14px 16px;
+        border-radius: 10px; border: 1px solid #3a4a67; background: rgba(23,32,47,.95); color: #fff; font-size: 16px; }
+      #auth-form .img-btn { margin: 8px auto 0; }
+      #auth-form .img-btn--gold { width: 100%; }
+      #auth-form .img-btn--stone { width: 62%; }
+      #auth-submit:disabled { opacity: .5; }
+      #auth-error { color: #ff6a56; font-size: 14px; min-height: 18px; margin: 10px 0 2px; text-shadow: 0 1px 3px #000; }
+      .link-btn { background: none; border: none; color: #9aa4b2; text-decoration: underline;
+        cursor: pointer; font-size: 14px; padding: 6px; }
+      /* ACCOUNT CHIP */
+      #account-chip { position: absolute; top: 10px; right: 10px; z-index: 2;
+        display: flex; align-items: center; gap: 8px; background: rgba(11,17,31,.8);
+        border: 1px solid #3a4a67; border-radius: 20px; padding: 4px 6px 4px 12px; }
+      #account-nick { font-size: 13px; font-weight: 700; color: #fff; }
     </style>
   </head>
   <body>
     <div id="app">
-      <section id="screen-start" class="screen active">
+      <section id="screen-auth" class="screen active">
+        <div id="auth-bg"><img id="auth-bg-img" src="./games/main-menu-bg.png" alt="" /></div>
+        <div id="auth-box">
+          <div id="auth-loading">Загрузка…</div>
+          <div id="auth-form" style="display:none">
+            <h1 id="auth-title">Вход</h1>
+            <input id="auth-nick" autocomplete="username" placeholder="Логин" />
+            <input id="auth-pass" type="password" autocomplete="current-password" placeholder="Пароль" />
+            <button class="img-btn img-btn--gold" id="auth-submit"><span>Войти</span></button>
+            <div id="auth-error"></div>
+            <button class="img-btn img-btn--stone" id="auth-toggle"><span>Регистрация</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-start" class="screen">
         <div id="menu-bg">
           <img id="menu-bg-img" src="./games/main-menu-bg.png" alt="" />
           <video id="menu-bg-video" class="menu-bg-video" src="./games/animated-main-menu.mp4"
@@ -164,6 +202,10 @@
           <video id="menu-bg-video-b" class="menu-bg-video" src="./games/animated-main-menu.mp4"
                  muted playsinline preload="auto" tabindex="-1" disablepictureinpicture
                  controlslist="nodownload noplaybackrate nofullscreen"></video>
+        </div>
+        <div id="account-chip" style="display:none">
+          <span id="account-nick"></span>
+          <button id="btn-logout" class="link-btn">Выйти</button>
         </div>
         <div id="menu-buttons">
           <button class="menu-btn" id="btn-campaign">

@@ -181,36 +181,36 @@ function saveProgression(p) {
 }
 
 // web-game/src/map.ts
-function currentLocationIndex(app2) {
-  const m = currentMonster(app2.progression);
+function currentLocationIndex(app3) {
+  const m = currentMonster(app3.progression);
   if (!m) return null;
   const match = /^loc(\d+)-/.exec(m.id);
   return match ? Number(match[1]) : null;
 }
-function renderMap(app2) {
+function renderMap(app3) {
   const wrap = document.getElementById("map-wrap");
   wrap.querySelectorAll(".node").forEach((n) => n.remove());
-  const curLoc = currentLocationIndex(app2);
+  const curLoc = currentLocationIndex(app3);
   for (let i = 0; i < NODE_POSITIONS.length; i++) {
     const locIndex = i + 1;
     const pos = NODE_POSITIONS[i];
-    const el = document.createElement("div");
-    el.className = "node";
-    el.style.left = `${pos.x * 100}%`;
-    el.style.top = `${pos.y * 100}%`;
-    el.textContent = String(locIndex);
+    const el2 = document.createElement("div");
+    el2.className = "node";
+    el2.style.left = `${pos.x * 100}%`;
+    el2.style.top = `${pos.y * 100}%`;
+    el2.textContent = String(locIndex);
     const hasContent = locIndex <= LOCATIONS.length;
     if (curLoc === null) {
-      el.classList.add(hasContent ? "done" : "locked");
+      el2.classList.add(hasContent ? "done" : "locked");
     } else if (locIndex < curLoc) {
-      el.classList.add("done");
+      el2.classList.add("done");
     } else if (locIndex === curLoc && hasContent) {
-      el.classList.add("current");
-      el.addEventListener("click", () => app2.goCard());
+      el2.classList.add("current");
+      el2.addEventListener("click", () => app3.goCard());
     } else {
-      el.classList.add("locked");
+      el2.classList.add("locked");
     }
-    wrap.appendChild(el);
+    wrap.appendChild(el2);
   }
 }
 
@@ -244,8 +244,8 @@ function onRep(state, m) {
 }
 
 // web-game/src/card.ts
-function renderCard(app2) {
-  const m = currentMonster(app2.progression);
+function renderCard(app3) {
+  const m = currentMonster(app3.progression);
   const img = document.getElementById("card-img");
   const target = document.getElementById("card-target");
   const hp = document.getElementById("card-hp");
@@ -398,14 +398,14 @@ var RepDetector = class {
   // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
   // проседания → не считается). Угол локтя используется лишь в запасном
   // режиме, когда ног в кадре нет и проседание вычислить нельзя.
-  isDown(mode, elbow, descent) {
-    if (mode === "plank") {
+  isDown(mode2, elbow, descent) {
+    if (mode2 === "plank") {
       return descent !== null && descent >= this.cfg.descentDownFrac;
     }
     return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
-  isUp(mode, elbow, descent) {
-    if (mode === "plank") {
+  isUp(mode2, elbow, descent) {
+    if (mode2 === "plank") {
       return descent !== null && descent <= this.cfg.descentUpFrac;
     }
     return elbow !== null && elbow >= this.cfg.elbowExtendedDeg;
@@ -577,8 +577,8 @@ var EDGES = [
   [KP.rightHip, KP.rightKnee],
   [KP.rightKnee, KP.rightAnkle]
 ];
-function startWorkout(app2) {
-  const found = currentMonster(app2.progression);
+function startWorkout(app3) {
+  const found = currentMonster(app3.progression);
   if (!found) return;
   const monster = found;
   const video = document.getElementById("wk-video");
@@ -619,8 +619,8 @@ function startWorkout(app2) {
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }
-    app2.render();
-    app2.show("screen-map");
+    app3.render();
+    app3.show("screen-map");
   };
   const updateHud = () => {
     counterEl.textContent = String(wk.repsInSet);
@@ -667,7 +667,7 @@ function startWorkout(app2) {
     if (res.event === "monsterDefeated") {
       finished = true;
       stopTimer();
-      app2.onDefeated();
+      app3.onDefeated();
     } else if (res.event === "setComplete") {
       startRest();
     }
@@ -746,6 +746,187 @@ function startWorkout(app2) {
   });
 }
 
+// web-game/src/auth.ts
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile,
+  setPersistence,
+  browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+
+// web-game/src/firebase.ts
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+var firebaseConfig = {
+  apiKey: "AIzaSyD7-mxTSyGKJ-qDMB543r8I7XTyAdTAMjU",
+  authDomain: "push-ups-rpg.firebaseapp.com",
+  projectId: "push-ups-rpg",
+  storageBucket: "push-ups-rpg.firebasestorage.app",
+  messagingSenderId: "212910431084",
+  appId: "1:212910431084:web:3a025b103755c097417149"
+};
+var app = initializeApp(firebaseConfig);
+var auth = getAuth(app);
+var db = getFirestore(app);
+
+// web-game/src/nickname.ts
+var NICK_RE = /^[a-z0-9_-]{3,20}$/;
+var EMAIL_DOMAIN = "pushuprpg.app";
+function normalizeNick(raw) {
+  return raw.trim().toLowerCase();
+}
+function validateNick(raw) {
+  if (!NICK_RE.test(normalizeNick(raw))) {
+    return "\u041B\u043E\u0433\u0438\u043D: 3\u201320 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432, \u0442\u043E\u043B\u044C\u043A\u043E \u043B\u0430\u0442\u0438\u043D\u0438\u0446\u0430, \u0446\u0438\u0444\u0440\u044B, _ \u0438 -";
+  }
+  return null;
+}
+function nickToEmail(raw) {
+  return `${normalizeNick(raw)}@${EMAIL_DOMAIN}`;
+}
+
+// web-game/src/auth.ts
+var PASSWORD_MIN = 6;
+setPersistence(auth, browserLocalPersistence).catch(() => {
+});
+async function register(rawNick, password) {
+  const nickErr = validateNick(rawNick);
+  if (nickErr) throw new Error(nickErr);
+  if (password.length < PASSWORD_MIN) throw new Error("\u041F\u0430\u0440\u043E\u043B\u044C: \u043C\u0438\u043D\u0438\u043C\u0443\u043C 6 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, nickToEmail(rawNick), password);
+    await updateProfile(cred.user, { displayName: rawNick.trim() });
+  } catch (e) {
+    throw new Error(authErrorText(e));
+  }
+}
+async function login(rawNick, password) {
+  try {
+    await signInWithEmailAndPassword(auth, nickToEmail(rawNick), password);
+  } catch (e) {
+    throw new Error(authErrorText(e));
+  }
+}
+function logout() {
+  return signOut(auth);
+}
+function onUser(cb) {
+  onAuthStateChanged(auth, (u) => {
+    if (!u) {
+      cb(null);
+      return;
+    }
+    const nickname = u.displayName || (u.email ? u.email.split("@")[0] : "");
+    cb({ uid: u.uid, nickname });
+  });
+}
+function authErrorText(e) {
+  const code = e?.code ?? "";
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "\u041B\u043E\u0433\u0438\u043D \u0443\u0436\u0435 \u0437\u0430\u043D\u044F\u0442";
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C";
+    case "auth/weak-password":
+      return "\u041F\u0430\u0440\u043E\u043B\u044C: \u043C\u0438\u043D\u0438\u043C\u0443\u043C 6 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432";
+    case "auth/network-request-failed":
+      return "\u041D\u0435\u0442 \u0441\u0435\u0442\u0438. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u043F\u043E\u0437\u0436\u0435";
+    default:
+      return "\u041E\u0448\u0438\u0431\u043A\u0430 \u0432\u0445\u043E\u0434\u0430. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437";
+  }
+}
+
+// web-game/src/remote-storage.ts
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+async function loadRemote(uid) {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return {
+    defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
+    lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
+  };
+}
+async function saveRemote(uid, p, nickname) {
+  await setDoc(
+    doc(db, "users", uid),
+    {
+      nickname,
+      defeatedCount: p.defeatedCount,
+      lastWorkoutDate: p.lastWorkoutDate,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+}
+
+// web-game/src/sync.ts
+function latestDate(a, b) {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a >= b ? a : b;
+}
+function mergeProgress(a, b) {
+  return {
+    defeatedCount: Math.max(a.defeatedCount, b.defeatedCount),
+    lastWorkoutDate: latestDate(a.lastWorkoutDate, b.lastWorkoutDate)
+  };
+}
+
+// web-game/src/auth-screen.ts
+var mode = "login";
+function el(id) {
+  return document.getElementById(id);
+}
+function initAuthScreen() {
+  const nick = el("auth-nick");
+  const pass = el("auth-pass");
+  const submit = el("auth-submit");
+  const err = el("auth-error");
+  const toggle = el("auth-toggle");
+  const title = el("auth-title");
+  const submitLabel = submit.querySelector("span");
+  const toggleLabel = toggle.querySelector("span");
+  function applyMode() {
+    title.textContent = mode === "login" ? "\u0412\u0445\u043E\u0434" : "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044F";
+    submitLabel.textContent = mode === "login" ? "\u0412\u043E\u0439\u0442\u0438" : "\u0421\u043E\u0437\u0434\u0430\u0442\u044C";
+    toggleLabel.textContent = mode === "login" ? "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044F" : "\u0412\u043E\u0439\u0442\u0438";
+    err.textContent = "";
+  }
+  toggle.addEventListener("click", () => {
+    mode = mode === "login" ? "register" : "login";
+    applyMode();
+  });
+  submit.addEventListener("click", async () => {
+    err.textContent = "";
+    submit.disabled = true;
+    try {
+      if (mode === "register") await register(nick.value, pass.value);
+      else await login(nick.value, pass.value);
+    } catch (e) {
+      err.textContent = e.message;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  applyMode();
+}
+function revealAuthForm() {
+  el("auth-loading").style.display = "none";
+  el("auth-form").style.display = "block";
+}
+
 // web-game/src/main.ts
 function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
@@ -765,7 +946,22 @@ function stopVictory() {
     victorySound = null;
   }
 }
-var app = {
+var currentUser = null;
+function showAccountChip(nickname) {
+  const chip = document.getElementById("account-chip");
+  const nick = document.getElementById("account-nick");
+  if (nickname) {
+    nick.textContent = nickname;
+    chip.style.display = "flex";
+  } else {
+    chip.style.display = "none";
+  }
+}
+function showSyncWarning() {
+  const nick = document.getElementById("account-nick");
+  if (currentUser) nick.textContent = `${currentUser.nickname} (\u043E\u0444\u0444\u043B\u0430\u0439\u043D)`;
+}
+var app2 = {
   progression: loadProgression(),
   show,
   render() {
@@ -783,6 +979,9 @@ var app = {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
+    if (currentUser) {
+      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
+    }
     document.getElementById("victory-name").textContent = m ? m.name : "";
     const next = currentMonster(this.progression);
     document.getElementById("victory-next").style.display = next ? "" : "none";
@@ -791,7 +990,7 @@ var app = {
   }
 };
 document.getElementById("btn-campaign").addEventListener("click", () => {
-  app.render();
+  app2.render();
   show("screen-map");
 });
 var menuVids = [
@@ -830,17 +1029,43 @@ if (menuVids.length === 2) {
 }
 document.getElementById("victory-next").addEventListener("click", () => {
   stopVictory();
-  app.render();
-  app.goCard();
+  app2.render();
+  app2.goCard();
 });
 document.getElementById("victory-map").addEventListener("click", () => {
   stopVictory();
-  app.render();
+  app2.render();
   show("screen-map");
 });
 document.getElementById("card-back-btn").addEventListener("click", () => {
-  app.render();
+  app2.render();
   show("screen-map");
 });
-document.getElementById("card-start-btn").addEventListener("click", () => app.goWorkout());
+document.getElementById("card-start-btn").addEventListener("click", () => app2.goWorkout());
 document.getElementById("map-back").addEventListener("click", () => show("screen-start"));
+document.getElementById("btn-logout").addEventListener("click", () => {
+  void logout();
+});
+initAuthScreen();
+onUser(async (user) => {
+  currentUser = user;
+  if (!user) {
+    showAccountChip(null);
+    revealAuthForm();
+    show("screen-auth");
+    return;
+  }
+  const local = loadProgression();
+  let remote = null;
+  try {
+    remote = await loadRemote(user.uid);
+  } catch {
+    showSyncWarning();
+  }
+  const merged = remote ? mergeProgress(local, remote) : local;
+  app2.progression = merged;
+  saveProgression(merged);
+  saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
+  showAccountChip(user.nickname);
+  show("screen-start");
+});
