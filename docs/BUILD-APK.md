@@ -1,8 +1,36 @@
-# Сборка APK локально (Android Studio)
+# Сборка APK
 
 EAS/Expo здесь **не подходит**: React Native 0.86 новее, чем поддерживает Expo
 (`install-expo-modules` отказывается — нет совместимого Expo SDK под RN 0.86).
+Голому RN Expo не нужен — собираем нативно (gradle), либо локально, либо в облаке.
+
+## Вариант A — GitHub Actions (рекомендуется, ничего не ставить локально)
+
+Сборка идёт на серверах GitHub (там уже есть Android SDK), тебе на диск ничего
+ставить не надо — качаешь готовый `.apk` файлом. Подходит, когда мало места на
+компе. Работает и с приватным репозиторием (есть бесплатный лимит минут; одна
+сборка ~10–20 мин).
+
+Workflow уже в репо: `.github/workflows/android-apk.yml`. Как запустить:
+1. Открой репозиторий на github.com → вкладка **Actions**.
+   (Если Actions выключены — включи: Settings → Actions → General → Allow all.)
+2. Слева выбери **Build Android APK** → кнопка **Run workflow** →
+   выбери ветку `push-ups-tracking-mvp` → **Run workflow**.
+3. Дождись зелёной галочки (~10–20 мин). Открой завершённый запуск →
+   внизу блок **Artifacts** → скачай **pushupsrpg-release-apk** (это zip,
+   внутри `app-release.apk`).
+4. Перекинь `.apk` на телефон, установи (разреши установку из неизвестных
+   источников). Это standalone-сборка, подписана debug-ключом — ставится и
+   работает без компьютера.
+
+Если сборка упадёт (стек свежий: vision-camera v5 / Nitro / NDK 27) — в том же
+запуске будет артефакт **gradle-build-logs** и лог шага «Build release APK».
+Пришли мне ошибку из лога — поправим версии в workflow.
+
+## Вариант B — локально (Android Studio)
+
 Голому RN Expo не нужен — собираем нативно через Android Studio / gradle.
+Требует ~несколько ГБ на диске (Android Studio + SDK + NDK).
 
 ## Что поставить (один раз)
 1. **Android Studio** (https://developer.android.com/studio) — ставит Android SDK.
