@@ -103,9 +103,11 @@
         text-shadow: 0 2px 3px #000; }
       #hint { display: none; }
       /* WORKOUT (battle UI в стиле референса) */
-      #screen-workout { position: relative; }
-      /* Вертикальный (портретный) кадр: ландшафтная вебкамера обрезается по центру. */
-      #wk-stage { position: relative; transform: scaleX(-1); width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: #000; }
+      #screen-workout.active { position: fixed; inset: 0; z-index: 10; background: #000;
+        display: flex; align-items: center; justify-content: center; }
+      /* Камера: на всю высоту экрана, не шире 600px, по центру. */
+      #wk-stage { position: relative; transform: scaleX(-1); width: min(100vw, 600px); height: 100dvh;
+        margin: 0 auto; overflow: hidden; background: #000; }
       #wk-video, #wk-overlay { width: 100%; height: 100%; object-fit: cover; display: block; }
       #wk-video { background: #000; }
       #wk-overlay { position: absolute; inset: 0; }
