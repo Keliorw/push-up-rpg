@@ -8,8 +8,13 @@ import {loadProgression, saveProgression} from './storage';
 import {renderMap} from './map';
 import {renderCard} from './card';
 import {startWorkout} from './workout-screen';
+import {onUser, logout, GameUser} from './auth';
+import {loadRemote, saveRemote} from './remote-storage';
+import {mergeProgress} from './sync';
+import {initAuthScreen, revealAuthForm} from './auth-screen';
 
 export type ScreenId =
+  | 'screen-auth'
   | 'screen-start'
   | 'screen-map'
   | 'screen-card'
@@ -47,6 +52,25 @@ function stopVictory(): void {
   }
 }
 
+let currentUser: GameUser | null = null;
+
+function showAccountChip(nickname: string | null): void {
+  const chip = document.getElementById('account-chip') as HTMLElement;
+  const nick = document.getElementById('account-nick') as HTMLElement;
+  if (nickname) {
+    nick.textContent = nickname;
+    chip.style.display = 'flex';
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+// Ненавязчивое уведомление, что синхронизация не удалась (прогресс сохранён локально).
+function showSyncWarning(): void {
+  const nick = document.getElementById('account-nick') as HTMLElement;
+  if (currentUser) nick.textContent = `${currentUser.nickname} (оффлайн)`;
+}
+
 const app: App = {
   progression: loadProgression(),
   show,
@@ -65,6 +89,9 @@ const app: App = {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
+    if (currentUser) {
+      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
+    }
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
     // «Следующий монстр» показываем только если ещё есть кого бить.
     const next = currentMonster(this.progression);
@@ -143,3 +170,35 @@ document.getElementById('card-back-btn')!.addEventListener('click', () => {
 document.getElementById('card-start-btn')!.addEventListener('click', () => app.goWorkout());
 // MAP: возврат в главное меню
 document.getElementById('map-back')!.addEventListener('click', () => show('screen-start'));
+
+// LOGOUT
+document.getElementById('btn-logout')!.addEventListener('click', () => {
+  void logout(); // onUser вернёт null и покажет экран входа
+});
+
+// AUTH BOOTSTRAP: аккаунт обязателен. До входа — экран логина/регистрации.
+initAuthScreen();
+onUser(async user => {
+  currentUser = user;
+  if (!user) {
+    showAccountChip(null);
+    revealAuthForm();
+    show('screen-auth');
+    return;
+  }
+  // Вошли: тянем облако, мёржим с локальным (прогресс не откатывается),
+  // пишем результат в оба хранилища.
+  const local = loadProgression();
+  let remote = null;
+  try {
+    remote = await loadRemote(user.uid);
+  } catch {
+    showSyncWarning();
+  }
+  const merged = remote ? mergeProgress(local, remote) : local;
+  app.progression = merged;
+  saveProgression(merged);
+  saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
+  showAccountChip(user.nickname);
+  show('screen-start');
+});
