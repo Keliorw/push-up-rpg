@@ -10,11 +10,16 @@ import {renderCard} from './card';
 import {startWorkout} from './workout-screen';
 import {onUser, logout, GameUser} from './auth';
 import {loadRemote, saveRemote} from './remote-storage';
-import {mergeProgress} from './sync';
+import {mergeProfile, Profile} from './sync';
+import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
+import {openArena} from './arena-screen';
+import {ensureDetector} from './pose-model';
 
 export type ScreenId =
   | 'screen-auth'
+  | 'screen-loading'
+  | 'screen-arena'
   | 'screen-start'
   | 'screen-map'
   | 'screen-card'
@@ -23,10 +28,13 @@ export type ScreenId =
 
 export interface App {
   progression: Progression;
+  totalReps: number;
   show(id: ScreenId): void;
   render(): void;
   goCard(): void;
   goWorkout(): void;
+  addRep(): void; // +1 XP за отжимание (локально)
+  persistProfile(): void; // синхронизировать профиль (прогресс+XP) в Firestore
   onDefeated(): void; // called by the workout screen on monster defeat
 }
 
@@ -73,6 +81,7 @@ function showSyncWarning(): void {
 
 const app: App = {
   progression: loadProgression(),
+  totalReps: loadTotalReps(),
   show,
   render() {
     renderMap(this);
@@ -82,18 +91,39 @@ const app: App = {
     show('screen-card');
   },
   goWorkout() {
-    show('screen-workout');
-    startWorkout(this);
+    show('screen-loading');
+    const loadingBack = document.getElementById('loading-back') as HTMLElement;
+    const loadingText = document.getElementById('loading-text') as HTMLElement;
+    loadingBack.style.display = 'none';
+    loadingText.textContent = 'Загрузка уровня…';
+    ensureDetector().then(
+      detector => {
+        // Если пользователь ушёл с экрана загрузки — не перебиваем.
+        if (!document.getElementById('screen-loading')!.classList.contains('active')) return;
+        show('screen-workout');
+        startWorkout(this, detector);
+      },
+      () => {
+        loadingText.textContent = 'Не удалось загрузить модель';
+        loadingBack.style.display = 'inline-block';
+      },
+    );
+  },
+  addRep() {
+    this.totalReps += 1;
+    saveTotalReps(this.totalReps);
+  },
+  persistProfile() {
+    if (!currentUser) return;
+    const profile: Profile = {progression: this.progression, totalReps: this.totalReps};
+    saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
   },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
-    if (currentUser) {
-      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
-    }
+    this.persistProfile();
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
-    // «Следующий монстр» показываем только если ещё есть кого бить.
     const next = currentMonster(this.progression);
     (document.getElementById('victory-next') as HTMLElement).style.display = next ? '' : 'none';
     show('screen-victory');
@@ -101,11 +131,18 @@ const app: App = {
   },
 };
 
-// MAIN MENU: «Кампания» -> карта (как раньше START). «Arena» пока не активна.
+// MAIN MENU: «Кампания» -> карта (как раньше START).
 document.getElementById('btn-campaign')!.addEventListener('click', () => {
   app.render();
   show('screen-map');
 });
+
+// MAIN MENU: «Arena» -> рейтинг
+document.getElementById('btn-arena')!.addEventListener('click', () => {
+  void openArena(currentUser ? currentUser.uid : null);
+});
+document.getElementById('arena-back')!.addEventListener('click', () => show('screen-start'));
+document.getElementById('loading-back')!.addEventListener('click', () => show('screen-start'));
 
 // Анимированный фон меню: статичная картинка -> видео, когда догрузится.
 // Бесшовный цикл через два ролика (double-buffer): пока играет активный,
@@ -188,17 +225,21 @@ onUser(async user => {
   }
   // Вошли: тянем облако, мёржим с локальным (прогресс не откатывается),
   // пишем результат в оба хранилища.
-  const local = loadProgression();
-  let remote = null;
+  const local: Profile = {progression: loadProgression(), totalReps: loadTotalReps()};
+  let remote: Profile | null = null;
   try {
     remote = await loadRemote(user.uid);
   } catch {
     showSyncWarning();
   }
-  const merged = remote ? mergeProgress(local, remote) : local;
-  app.progression = merged;
-  saveProgression(merged);
+  const merged = remote ? mergeProfile(local, remote) : local;
+  app.progression = merged.progression;
+  app.totalReps = merged.totalReps;
+  saveProgression(merged.progression);
+  saveTotalReps(merged.totalReps);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show('screen-start');
+  // Предзагружаем MoveNet в фоне, чтобы к началу боя модель была готова.
+  void ensureDetector().catch(() => {});
 });

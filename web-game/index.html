@@ -103,9 +103,11 @@
         text-shadow: 0 2px 3px #000; }
       #hint { display: none; }
       /* WORKOUT (battle UI в стиле референса) */
-      #screen-workout { position: relative; }
-      /* Вертикальный (портретный) кадр: ландшафтная вебкамера обрезается по центру. */
-      #wk-stage { position: relative; transform: scaleX(-1); width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: #000; }
+      #screen-workout.active { position: fixed; inset: 0; z-index: 10; background: #000;
+        display: flex; align-items: center; justify-content: center; }
+      /* Камера: на всю высоту экрана, не шире 600px, по центру. */
+      #wk-stage { position: relative; transform: scaleX(-1); width: min(100vw, 600px); height: 100dvh;
+        margin: 0 auto; overflow: hidden; background: #000; }
       #wk-video, #wk-overlay { width: 100%; height: 100%; object-fit: cover; display: block; }
       #wk-video { background: #000; }
       #wk-overlay { position: absolute; inset: 0; }
@@ -174,6 +176,27 @@
         display: flex; align-items: center; gap: 8px; background: rgba(11,17,31,.8);
         border: 1px solid #3a4a67; border-radius: 20px; padding: 4px 6px 4px 12px; }
       #account-nick { font-size: 13px; font-weight: 700; color: #fff; }
+      /* ARENA */
+      #screen-arena { min-height: 100vh; background: #101828; }
+      #arena-box { max-width: 480px; margin: 0 auto; padding: 16px; }
+      #arena-box h1 { color: #F5A623; text-align: center; font-size: 26px; margin: 8px 0 16px; }
+      .arena-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center;
+        padding: 10px 12px; border-bottom: 1px solid #24314a; font-size: 14px; }
+      .arena-row .rank { color: #9aa4b2; font-weight: 800; text-align: right; }
+      .arena-row .who { display: flex; flex-direction: column; }
+      .arena-row .who b { color: #fff; }
+      .arena-row .who span { color: #9aa4b2; font-size: 12px; }
+      .arena-row .xp { color: #F5A623; font-weight: 800; white-space: nowrap; }
+      .arena-row.me { background: rgba(245,166,35,.14); border-radius: 8px; }
+      #arena-empty { color: #9aa4b2; text-align: center; padding: 24px; }
+      /* LOADING */
+      #screen-loading { min-height: 100vh; display: none; }
+      #screen-loading.active { display: flex; align-items: center; justify-content: center; }
+      #loading-box { text-align: center; color: #e6e0cf; }
+      #loading-text { margin-top: 16px; font-size: 16px; }
+      .spinner { width: 44px; height: 44px; margin: 0 auto; border-radius: 50%;
+        border: 4px solid #24314a; border-top-color: #F5A623; animation: spin 0.9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
@@ -190,6 +213,14 @@
             <div id="auth-error"></div>
             <button class="img-btn img-btn--stone" id="auth-toggle"><span>Регистрация</span></button>
           </div>
+        </div>
+      </section>
+
+      <section id="screen-loading" class="screen">
+        <div id="loading-box">
+          <div class="spinner"></div>
+          <div id="loading-text">Загрузка уровня…</div>
+          <button id="loading-back" class="link-btn" style="display:none">← В меню</button>
         </div>
       </section>
 
@@ -259,6 +290,14 @@
           <div id="wk-counter">0</div>
         </div>
         <div id="wk-rest"></div>
+      </section>
+
+      <section id="screen-arena" class="screen">
+        <div id="arena-box">
+          <button id="arena-back" class="link-btn">← В меню</button>
+          <h1>Рейтинг</h1>
+          <div id="arena-list">Загрузка…</div>
+        </div>
       </section>
 
       <section id="screen-victory" class="screen">

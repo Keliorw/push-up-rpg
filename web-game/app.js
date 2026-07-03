@@ -179,6 +179,15 @@ function loadProgression() {
 function saveProgression(p) {
   localStorage.setItem(KEY, JSON.stringify(p));
 }
+var XP_KEY = "pushuprpg.totalReps";
+function loadTotalReps() {
+  const raw = localStorage.getItem(XP_KEY);
+  const n = raw != null ? Number(raw) : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+function saveTotalReps(n) {
+  localStorage.setItem(XP_KEY, String(Math.max(0, Math.floor(n))));
+}
 
 // web-game/src/map.ts
 function currentLocationIndex(app3) {
@@ -610,7 +619,7 @@ var EDGES = [
   [KP.rightHip, KP.rightKnee],
   [KP.rightKnee, KP.rightAnkle]
 ];
-function startWorkout(app3) {
+function startWorkout(app3, detector) {
   const found = currentMonster(app3.progression);
   if (!found) return;
   const monster = found;
@@ -632,7 +641,7 @@ function startWorkout(app3) {
   const maxHp = totalTarget(monster);
   const hitSound = new Audio("./games/hit.mp3");
   hitSound.volume = 0.6;
-  const detector = new RepDetector(DEFAULT_CONFIG);
+  const repDetector = new RepDetector(DEFAULT_CONFIG);
   let wk = newWorkout(monster);
   let resting = false;
   let finished = false;
@@ -652,6 +661,7 @@ function startWorkout(app3) {
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }
+    app3.persistProfile();
     app3.render();
     app3.show("screen-map");
   };
@@ -696,6 +706,7 @@ function startWorkout(app3) {
     }
     const res = onRep(wk, monster);
     wk = res.state;
+    app3.addRep();
     updateHud();
     if (res.event === "monsterDefeated") {
       finished = true;
@@ -740,13 +751,7 @@ function startWorkout(app3) {
     });
     video.srcObject = stream;
     await video.play();
-    statusEl.textContent = "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044E \u043C\u043E\u0434\u0435\u043B\u044C\u2026";
-    await tf.setBackend("webgl");
-    await tf.ready();
-    const det = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-    );
+    const det = detector;
     statusEl.textContent = "\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430";
     async function loop() {
       if (finished) {
@@ -762,7 +767,7 @@ function startWorkout(app3) {
           pose.push({ x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0 });
         }
         if (!resting) {
-          const events = detector.process(pose, performance.now());
+          const events = repDetector.process(pose, performance.now());
           for (const e of events) {
             if (e === "repCounted") handleRep();
           }
@@ -880,28 +885,52 @@ import {
   doc,
   getDoc,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 async function loadRemote(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
   const d = snap.data();
   return {
-    defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
-    lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
+    progression: {
+      defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
+      lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
+    },
+    totalReps: typeof d.totalReps === "number" ? d.totalReps : 0
   };
 }
-async function saveRemote(uid, p, nickname) {
+async function saveRemote(uid, profile, nickname) {
   await setDoc(
     doc(db, "users", uid),
     {
       nickname,
-      defeatedCount: p.defeatedCount,
-      lastWorkoutDate: p.lastWorkoutDate,
+      defeatedCount: profile.progression.defeatedCount,
+      lastWorkoutDate: profile.progression.lastWorkoutDate,
+      totalReps: profile.totalReps,
       updatedAt: serverTimestamp()
     },
     { merge: true }
   );
+}
+async function loadLeaderboard(max) {
+  const q = query(collection(db, "users"), orderBy("defeatedCount", "desc"), limit(max));
+  const snap = await getDocs(q);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    const d = docSnap.data();
+    rows.push({
+      uid: docSnap.id,
+      nickname: typeof d.nickname === "string" && d.nickname ? d.nickname : "\u2014",
+      defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
+      totalReps: typeof d.totalReps === "number" ? d.totalReps : 0
+    });
+  });
+  return rows;
 }
 
 // web-game/src/sync.ts
@@ -914,6 +943,12 @@ function mergeProgress(a, b) {
   return {
     defeatedCount: Math.max(a.defeatedCount, b.defeatedCount),
     lastWorkoutDate: latestDate(a.lastWorkoutDate, b.lastWorkoutDate)
+  };
+}
+function mergeProfile(a, b) {
+  return {
+    progression: mergeProgress(a.progression, b.progression),
+    totalReps: Math.max(a.totalReps, b.totalReps)
   };
 }
 
@@ -960,6 +995,63 @@ function revealAuthForm() {
   el("auth-form").style.display = "block";
 }
 
+// web-game/src/levels.ts
+function locationLabel(defeatedCount) {
+  const m = MONSTER_SEQUENCE[defeatedCount];
+  if (!m) return { index: null, name: "\u041A\u0430\u043C\u043F\u0430\u043D\u0438\u044F \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u0430" };
+  const match = /^loc(\d+)-/.exec(m.id);
+  const index = match ? Number(match[1]) : null;
+  const loc = index != null ? LOCATIONS.find((l) => l.index === index) : void 0;
+  return { index, name: loc ? loc.name : `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${index ?? "?"}` };
+}
+
+// web-game/src/arena-screen.ts
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+function rowHtml(row, rank, isMe) {
+  const loc = locationLabel(row.defeatedCount);
+  const locText = loc.index != null ? `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${loc.index} \xB7 ${esc(loc.name)}` : esc(loc.name);
+  return `<div class="arena-row${isMe ? " me" : ""}"><div class="rank">${rank}</div><div class="who"><b>${esc(row.nickname)}</b><span>${locText}</span></div><div class="xp">${row.totalReps} XP</div></div>`;
+}
+async function openArena(currentUid) {
+  const list = document.getElementById("arena-list");
+  list.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026";
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  document.getElementById("screen-arena").classList.add("active");
+  try {
+    const rows = await loadLeaderboard(50);
+    rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps);
+    if (rows.length === 0) {
+      list.innerHTML = '<div id="arena-empty">\u041F\u043E\u043A\u0430 \u043D\u0438\u043A\u0442\u043E \u043D\u0435 \u0438\u0433\u0440\u0430\u043B</div>';
+      return;
+    }
+    list.innerHTML = rows.map((r, i) => rowHtml(r, i + 1, r.uid === currentUid)).join("");
+  } catch {
+    list.innerHTML = '<div id="arena-empty">\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0435\u0439\u0442\u0438\u043D\u0433</div>';
+  }
+}
+
+// web-game/src/pose-model.ts
+var detectorPromise = null;
+function ensureDetector() {
+  if (!detectorPromise) {
+    detectorPromise = (async () => {
+      await tf.setBackend("webgl");
+      await tf.ready();
+      return poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+      });
+    })().catch((err) => {
+      detectorPromise = null;
+      throw err;
+    });
+  }
+  return detectorPromise;
+}
+
 // web-game/src/main.ts
 function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
@@ -996,6 +1088,7 @@ function showSyncWarning() {
 }
 var app2 = {
   progression: loadProgression(),
+  totalReps: loadTotalReps(),
   show,
   render() {
     renderMap(this);
@@ -1005,16 +1098,37 @@ var app2 = {
     show("screen-card");
   },
   goWorkout() {
-    show("screen-workout");
-    startWorkout(this);
+    show("screen-loading");
+    const loadingBack = document.getElementById("loading-back");
+    const loadingText = document.getElementById("loading-text");
+    loadingBack.style.display = "none";
+    loadingText.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0440\u043E\u0432\u043D\u044F\u2026";
+    ensureDetector().then(
+      (detector) => {
+        if (!document.getElementById("screen-loading").classList.contains("active")) return;
+        show("screen-workout");
+        startWorkout(this, detector);
+      },
+      () => {
+        loadingText.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u043E\u0434\u0435\u043B\u044C";
+        loadingBack.style.display = "inline-block";
+      }
+    );
+  },
+  addRep() {
+    this.totalReps += 1;
+    saveTotalReps(this.totalReps);
+  },
+  persistProfile() {
+    if (!currentUser) return;
+    const profile = { progression: this.progression, totalReps: this.totalReps };
+    saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
   },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
-    if (currentUser) {
-      saveRemote(currentUser.uid, this.progression, currentUser.nickname).catch(showSyncWarning);
-    }
+    this.persistProfile();
     document.getElementById("victory-name").textContent = m ? m.name : "";
     const next = currentMonster(this.progression);
     document.getElementById("victory-next").style.display = next ? "" : "none";
@@ -1026,6 +1140,11 @@ document.getElementById("btn-campaign").addEventListener("click", () => {
   app2.render();
   show("screen-map");
 });
+document.getElementById("btn-arena").addEventListener("click", () => {
+  void openArena(currentUser ? currentUser.uid : null);
+});
+document.getElementById("arena-back").addEventListener("click", () => show("screen-start"));
+document.getElementById("loading-back").addEventListener("click", () => show("screen-start"));
 var menuVids = [
   document.getElementById("menu-bg-video"),
   document.getElementById("menu-bg-video-b")
@@ -1088,17 +1207,21 @@ onUser(async (user) => {
     show("screen-auth");
     return;
   }
-  const local = loadProgression();
+  const local = { progression: loadProgression(), totalReps: loadTotalReps() };
   let remote = null;
   try {
     remote = await loadRemote(user.uid);
   } catch {
     showSyncWarning();
   }
-  const merged = remote ? mergeProgress(local, remote) : local;
-  app2.progression = merged;
-  saveProgression(merged);
+  const merged = remote ? mergeProfile(local, remote) : local;
+  app2.progression = merged.progression;
+  app2.totalReps = merged.totalReps;
+  saveProgression(merged.progression);
+  saveTotalReps(merged.totalReps);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show("screen-start");
+  void ensureDetector().catch(() => {
+  });
 });
