@@ -34,6 +34,7 @@ export interface App {
   goCard(): void;
   goWorkout(): void;
   addRep(): void; // +1 XP за отжимание (локально)
+  persistProfile(): void; // синхронизировать профиль (прогресс+XP) в Firestore
   onDefeated(): void; // called by the workout screen on monster defeat
 }
 
@@ -112,14 +113,16 @@ const app: App = {
     this.totalReps += 1;
     saveTotalReps(this.totalReps);
   },
+  persistProfile() {
+    if (!currentUser) return;
+    const profile: Profile = {progression: this.progression, totalReps: this.totalReps};
+    saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
+  },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
-    if (currentUser) {
-      const profile: Profile = {progression: this.progression, totalReps: this.totalReps};
-      saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
-    }
+    this.persistProfile();
     (document.getElementById('victory-name') as HTMLElement).textContent = m ? m.name : '';
     const next = currentMonster(this.progression);
     (document.getElementById('victory-next') as HTMLElement).style.display = next ? '' : 'none';

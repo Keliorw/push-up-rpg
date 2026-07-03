@@ -661,6 +661,7 @@ function startWorkout(app3, detector) {
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
     }
+    app3.persistProfile();
     app3.render();
     app3.show("screen-map");
   };
@@ -1118,14 +1119,16 @@ var app2 = {
     this.totalReps += 1;
     saveTotalReps(this.totalReps);
   },
+  persistProfile() {
+    if (!currentUser) return;
+    const profile = { progression: this.progression, totalReps: this.totalReps };
+    saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
+  },
   onDefeated() {
     const m = currentMonster(this.progression);
     this.progression = defeatMonster(this.progression, todayISO());
     saveProgression(this.progression);
-    if (currentUser) {
-      const profile = { progression: this.progression, totalReps: this.totalReps };
-      saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
-    }
+    this.persistProfile();
     document.getElementById("victory-name").textContent = m ? m.name : "";
     const next = currentMonster(this.progression);
     document.getElementById("victory-next").style.display = next ? "" : "none";

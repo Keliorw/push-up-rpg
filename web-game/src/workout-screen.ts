@@ -81,6 +81,7 @@ export function startWorkout(app: App, detector: any): void {
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
     }
+    app.persistProfile(); // XP из этого боя (даже без победы) уходит в облако
     app.render();
     app.show('screen-map');
   };
