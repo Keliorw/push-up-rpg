@@ -788,10 +788,23 @@ var app = {
     playVictory();
   }
 };
-document.getElementById("start-btn").addEventListener("click", () => {
+document.getElementById("btn-campaign").addEventListener("click", () => {
   app.render();
   show("screen-map");
 });
+var menuVideo = document.getElementById("menu-bg-video");
+if (menuVideo) {
+  const showVideo = () => {
+    menuVideo.classList.add("ready");
+    void menuVideo.play().catch(() => {
+    });
+  };
+  if (menuVideo.readyState >= 3) {
+    showVideo();
+  } else {
+    menuVideo.addEventListener("canplaythrough", showVideo, { once: true });
+  }
+}
 document.getElementById("victory-btn").addEventListener("click", () => {
   stopVictory();
   app.render();

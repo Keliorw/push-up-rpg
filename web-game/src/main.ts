@@ -71,11 +71,26 @@ const app: App = {
   },
 };
 
-// START
-document.getElementById('start-btn')!.addEventListener('click', () => {
+// MAIN MENU: «Кампания» -> карта (как раньше START). «Arena» пока не активна.
+document.getElementById('btn-campaign')!.addEventListener('click', () => {
   app.render();
   show('screen-map');
 });
+
+// Анимированный фон меню: сначала статичная картинка, затем подменяем видео,
+// когда оно догрузится. Видео muted/loop/autoplay, без плеера и паузы.
+const menuVideo = document.getElementById('menu-bg-video') as HTMLVideoElement | null;
+if (menuVideo) {
+  const showVideo = () => {
+    menuVideo.classList.add('ready');
+    void menuVideo.play().catch(() => {});
+  };
+  if (menuVideo.readyState >= 3) {
+    showVideo();
+  } else {
+    menuVideo.addEventListener('canplaythrough', showVideo, {once: true});
+  }
+}
 // VICTORY -> map
 document.getElementById('victory-btn')!.addEventListener('click', () => {
   stopVictory();

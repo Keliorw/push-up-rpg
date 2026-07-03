@@ -21,9 +21,25 @@
         padding: 16px 40px; font-size: 20px; font-weight: 800; letter-spacing: 1px;
       }
       .btn:disabled { opacity: .5; }
-      /* START */
-      #screen-start { text-align: center; padding-top: 30vh; }
-      #screen-start h1 { font-size: 32px; font-weight: 900; }
+      /* MAIN MENU (start) */
+      #screen-start { position: relative; height: 100vh; overflow: hidden; padding: 0; }
+      #menu-bg { position: absolute; inset: 0; z-index: 0; background: #101828; }
+      #menu-bg-img, #menu-bg-video {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        object-fit: cover; display: block;
+      }
+      /* Видео проявляется поверх статичной картинки, когда загрузится. */
+      #menu-bg-video { opacity: 0; transition: opacity .6s ease; pointer-events: none; }
+      #menu-bg-video.ready { opacity: 1; }
+      #menu-buttons {
+        position: absolute; left: 0; right: 0; bottom: 6vh; z-index: 1;
+        display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 20px;
+      }
+      .menu-btn { background: none; border: none; padding: 0; cursor: pointer;
+        width: 82%; max-width: 340px; transition: transform .1s ease; }
+      .menu-btn img { width: 100%; height: auto; display: block;
+        filter: drop-shadow(0 4px 12px rgba(0,0,0,.6)); }
+      .menu-btn:active { transform: translateY(1px) scale(.99); }
       /* MAP */
       #map-wrap { position: relative; }
       #map-img { width: 100%; display: block; }
@@ -94,8 +110,21 @@
   <body>
     <div id="app">
       <section id="screen-start" class="screen active">
-        <h1>Push-Ups RPG</h1>
-        <button class="btn" id="start-btn">START</button>
+        <div id="menu-bg">
+          <img id="menu-bg-img" src="./games/main-menu-bg.png" alt="" />
+          <video id="menu-bg-video" src="./games/animated-main-menu.mp4"
+                 muted loop playsinline autoplay preload="auto"
+                 tabindex="-1" disablepictureinpicture
+                 controlslist="nodownload noplaybackrate nofullscreen"></video>
+        </div>
+        <div id="menu-buttons">
+          <button class="menu-btn" id="btn-campaign">
+            <img src="./games/campaniy.png" alt="Кампания" />
+          </button>
+          <button class="menu-btn" id="btn-arena">
+            <img src="./games/arena.png" alt="Arena" />
+          </button>
+        </div>
       </section>
 
       <section id="screen-map" class="screen">
