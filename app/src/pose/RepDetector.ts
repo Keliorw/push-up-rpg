@@ -23,6 +23,13 @@ export interface DetectorDebug {
   visibleKeypoints: number;
   /** Отношение высота/ширина рамки тела (>~2.5 = стоящий, не планка). */
   bodyAspect: number | null;
+  /**
+   * Насколько колени выше плеч в кадре, в долях длины торса (ноги за корпусом /
+   * дальше от камеры). null если нет плеч+колен. Меньше порога = не упор лёжа.
+   */
+  legsBehindFrac: number | null;
+  /** Прошло ли правило «ноги дальше и за туловищем» (для планки). */
+  legsBehind: boolean;
 }
 
 type State = 'noPosition' | 'holding' | 'up' | 'down';
@@ -63,6 +70,8 @@ export class RepDetector {
     phase: 'up',
     visibleKeypoints: 0,
     bodyAspect: null,
+    legsBehindFrac: null,
+    legsBehind: false,
   };
 
   constructor(private readonly cfg: DetectorConfig = DEFAULT_CONFIG) {}
@@ -73,6 +82,8 @@ export class RepDetector {
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
+    this.debug.legsBehindFrac = gate.legsBehindFrac;
+    this.debug.legsBehind = gate.legsBehind;
 
     if (!gate.inPosition) {
       // Кратковременная пропажа точек во время движения не должна рвать позицию:
@@ -125,17 +136,23 @@ export class RepDetector {
     }
   }
 
-  // В планке (видно тело+ноги) счёт ведётся ТОЛЬКО по проседанию корпуса —
-  // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
-  // проседания → не считается). Угол локтя используется лишь в запасном
-  // режиме, когда ног в кадре нет и проседание вычислить нельзя.
+  // В планке (видно тело+ноги) счёт ведётся по проседанию корпуса — это
+  // отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
+  // проседания → не считается). Если руки видны, «вниз» дополнительно требует
+  // согнутого локтя: при вставании из упора проседание пересекает порог, но
+  // руки остаются прямыми (~175°) — реальный повтор сгибает локоть до 119–137°.
+  // Угол локтя как ЕДИНСТВЕННЫЙ сигнал используется лишь в запасном режиме,
+  // когда ног в кадре нет и проседание вычислить нельзя.
   private isDown(
     mode: GateMode,
     elbow: number | null,
     descent: number | null,
   ): boolean {
     if (mode === 'plank') {
-      return descent !== null && descent >= this.cfg.descentDownFrac;
+      const descended = descent !== null && descent >= this.cfg.descentDownFrac;
+      const elbowOk =
+        elbow === null || elbow <= this.cfg.plankElbowBendMaxDeg;
+      return descended && elbowOk;
     }
     return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
@@ -235,19 +252,39 @@ export class RepDetector {
     inPosition: boolean;
     mode: GateMode;
     torsoAngle: number | null;
+    legsBehindFrac: number | null;
+    legsBehind: boolean;
   } {
     const shoulder = this.mid(pose, KP.leftShoulder, KP.rightShoulder);
     const hip = this.mid(pose, KP.leftHip, KP.rightHip);
     const knee = this.mid(pose, KP.leftKnee, KP.rightKnee);
 
-    // Строгий гейт планки — тело и ноги видны: корпус прямой И тело
-    // горизонтальное (не вытянуто вертикально, как у стоящего человека).
+    // Строгий гейт планки — тело и ноги видны. Упор лёжа = (1) корпус прямой,
+    // (2) тело горизонтальное (не вытянуто вертикально, как у стоящего) И
+    // (3) НОГИ ДАЛЬШЕ от камеры и ЗА туловищем. С камеры на полу близкие
+    // приподнятые плечи в кадре ВЫШЕ далёких колен, поэтому сигнал
+    // (плечи.y − колени.y)/торс в планке умеренно отрицательный (−2.6…−0.7);
+    // при вставании/на коленях плечи взлетают над коленями и сигнал резко
+    // падает (−3.4…−5) — полоса [min, max] отсекает этот момент.
     if (shoulder && hip && knee) {
       const torsoAngle = angleDeg(shoulder, hip, knee);
       const aspect = this.bodyAspect(pose);
+      const torsoLen = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+      const legsBehindFrac =
+        torsoLen > 1e-6 ? (shoulder.y - knee.y) / torsoLen : null;
+      const legsBehind =
+        legsBehindFrac !== null &&
+        legsBehindFrac >= this.cfg.legsBehindMinFrac &&
+        legsBehindFrac <= this.cfg.legsBehindMaxFrac;
       const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
       const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
-      return {inPosition: straight && horizontal, mode: 'plank', torsoAngle};
+      return {
+        inPosition: straight && horizontal && legsBehind,
+        mode: 'plank',
+        torsoAngle,
+        legsBehindFrac,
+        legsBehind,
+      };
     }
 
     // Запасной гейт — ноги вне кадра: плечи + хотя бы одна рука с запястьем
@@ -258,11 +295,23 @@ export class RepDetector {
         const e = this.vis(pose, arm.elbow);
         const w = this.vis(pose, arm.wrist);
         if (s && e && w && w.y > s.y) {
-          return {inPosition: true, mode: 'fallback', torsoAngle: null};
+          return {
+            inPosition: true,
+            mode: 'fallback',
+            torsoAngle: null,
+            legsBehindFrac: null,
+            legsBehind: false,
+          };
         }
       }
     }
-    return {inPosition: false, mode: 'none', torsoAngle: null};
+    return {
+      inPosition: false,
+      mode: 'none',
+      torsoAngle: null,
+      legsBehindFrac: null,
+      legsBehind: false,
+    };
   }
 
   /** Сглаженный средний угол локтя по видимым рукам; null если рук нет. */
