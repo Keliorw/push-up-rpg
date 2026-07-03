@@ -24,13 +24,13 @@
       /* MAIN MENU (start) */
       #screen-start { position: relative; height: 100vh; overflow: hidden; padding: 0; }
       #menu-bg { position: absolute; inset: 0; z-index: 0; background: #101828; }
-      #menu-bg-img, #menu-bg-video {
+      #menu-bg-img, .menu-bg-video {
         position: absolute; inset: 0; width: 100%; height: 100%;
         object-fit: cover; display: block;
       }
-      /* Видео проявляется поверх статичной картинки, когда загрузится. */
-      #menu-bg-video { opacity: 0; transition: opacity .1s ease; pointer-events: none; }
-      #menu-bg-video.ready { opacity: 1; }
+      /* Два ролика для бесшовного цикла (double-buffer): активный проявлен. */
+      .menu-bg-video { opacity: 0; transition: opacity .1s ease; pointer-events: none; }
+      .menu-bg-video.ready { opacity: 1; }
       #menu-buttons {
         position: absolute; left: 0; right: 0; bottom: 6vh; z-index: 1;
         display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 20px;
@@ -112,9 +112,11 @@
       <section id="screen-start" class="screen active">
         <div id="menu-bg">
           <img id="menu-bg-img" src="./games/main-menu-bg.png" alt="" />
-          <video id="menu-bg-video" src="./games/animated-main-menu.mp4"
-                 muted loop playsinline autoplay preload="auto"
-                 tabindex="-1" disablepictureinpicture
+          <video id="menu-bg-video" class="menu-bg-video" src="./games/animated-main-menu.mp4"
+                 muted playsinline preload="auto" tabindex="-1" disablepictureinpicture
+                 controlslist="nodownload noplaybackrate nofullscreen"></video>
+          <video id="menu-bg-video-b" class="menu-bg-video" src="./games/animated-main-menu.mp4"
+                 muted playsinline preload="auto" tabindex="-1" disablepictureinpicture
                  controlslist="nodownload noplaybackrate nofullscreen"></video>
         </div>
         <div id="menu-buttons">

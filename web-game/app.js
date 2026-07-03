@@ -792,18 +792,34 @@ document.getElementById("btn-campaign").addEventListener("click", () => {
   app.render();
   show("screen-map");
 });
-var menuVideo = document.getElementById("menu-bg-video");
-if (menuVideo) {
-  const showVideo = () => {
-    menuVideo.classList.add("ready");
-    void menuVideo.play().catch(() => {
+var menuVids = [
+  document.getElementById("menu-bg-video"),
+  document.getElementById("menu-bg-video-b")
+].filter(Boolean);
+if (menuVids.length === 2) {
+  let active = 0;
+  const advance = () => {
+    const incoming = menuVids[active ^ 1];
+    const outgoing = menuVids[active];
+    incoming.classList.add("ready");
+    void incoming.play().catch(() => {
+    });
+    outgoing.classList.remove("ready");
+    active ^= 1;
+    outgoing.pause();
+    outgoing.currentTime = 0;
+  };
+  menuVids.forEach((v) => {
+    v.loop = false;
+    v.addEventListener("ended", advance);
+  });
+  const start = () => {
+    menuVids[0].classList.add("ready");
+    void menuVids[0].play().catch(() => {
     });
   };
-  if (menuVideo.readyState >= 3) {
-    showVideo();
-  } else {
-    menuVideo.addEventListener("canplaythrough", showVideo, { once: true });
-  }
+  if (menuVids[0].readyState >= 3) start();
+  else menuVids[0].addEventListener("canplaythrough", start, { once: true });
 }
 document.getElementById("victory-btn").addEventListener("click", () => {
   stopVictory();

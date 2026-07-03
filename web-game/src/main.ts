@@ -77,19 +77,38 @@ document.getElementById('btn-campaign')!.addEventListener('click', () => {
   show('screen-map');
 });
 
-// Анимированный фон меню: сначала статичная картинка, затем подменяем видео,
-// когда оно догрузится. Видео muted/loop/autoplay, без плеера и паузы.
-const menuVideo = document.getElementById('menu-bg-video') as HTMLVideoElement | null;
-if (menuVideo) {
-  const showVideo = () => {
-    menuVideo.classList.add('ready');
-    void menuVideo.play().catch(() => {});
+// Анимированный фон меню: статичная картинка -> видео, когда догрузится.
+// Бесшовный цикл через два ролика (double-buffer): пока играет активный,
+// второй уже стоит на кадре 0 (декодирован), и на стыке эстафета передаётся
+// мгновенно — без перемотки к 0, которая на нативном loop даёт микро-фриз.
+// Видео muted/playsinline, pointer-events:none, без контролов и паузы.
+const menuVids = [
+  document.getElementById('menu-bg-video'),
+  document.getElementById('menu-bg-video-b'),
+].filter(Boolean) as HTMLVideoElement[];
+if (menuVids.length === 2) {
+  let active = 0;
+  const advance = () => {
+    const incoming = menuVids[active ^ 1]; // уже на кадре 0 и декодирован
+    const outgoing = menuVids[active];
+    incoming.classList.add('ready');
+    void incoming.play().catch(() => {});
+    outgoing.classList.remove('ready');
+    active ^= 1;
+    // Готовим ушедший ролик к следующему показу заранее, пока он скрыт.
+    outgoing.pause();
+    outgoing.currentTime = 0;
   };
-  if (menuVideo.readyState >= 3) {
-    showVideo();
-  } else {
-    menuVideo.addEventListener('canplaythrough', showVideo, {once: true});
-  }
+  menuVids.forEach(v => {
+    v.loop = false;
+    v.addEventListener('ended', advance);
+  });
+  const start = () => {
+    menuVids[0].classList.add('ready');
+    void menuVids[0].play().catch(() => {});
+  };
+  if (menuVids[0].readyState >= 3) start();
+  else menuVids[0].addEventListener('canplaythrough', start, {once: true});
 }
 // VICTORY -> map
 document.getElementById('victory-btn')!.addEventListener('click', () => {
