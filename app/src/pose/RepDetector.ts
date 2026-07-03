@@ -136,17 +136,23 @@ export class RepDetector {
     }
   }
 
-  // В планке (видно тело+ноги) счёт ведётся ТОЛЬКО по проседанию корпуса —
-  // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
-  // проседания → не считается). Угол локтя используется лишь в запасном
-  // режиме, когда ног в кадре нет и проседание вычислить нельзя.
+  // В планке (видно тело+ноги) счёт ведётся по проседанию корпуса — это
+  // отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
+  // проседания → не считается). Если руки видны, «вниз» дополнительно требует
+  // согнутого локтя: при вставании из упора проседание пересекает порог, но
+  // руки остаются прямыми (~175°) — реальный повтор сгибает локоть до 119–137°.
+  // Угол локтя как ЕДИНСТВЕННЫЙ сигнал используется лишь в запасном режиме,
+  // когда ног в кадре нет и проседание вычислить нельзя.
   private isDown(
     mode: GateMode,
     elbow: number | null,
     descent: number | null,
   ): boolean {
     if (mode === 'plank') {
-      return descent !== null && descent >= this.cfg.descentDownFrac;
+      const descended = descent !== null && descent >= this.cfg.descentDownFrac;
+      const elbowOk =
+        elbow === null || elbow <= this.cfg.plankElbowBendMaxDeg;
+      return descended && elbowOk;
     }
     return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
@@ -255,9 +261,11 @@ export class RepDetector {
 
     // Строгий гейт планки — тело и ноги видны. Упор лёжа = (1) корпус прямой,
     // (2) тело горизонтальное (не вытянуто вертикально, как у стоящего) И
-    // (3) НОГИ ДАЛЬШЕ от камеры и ЗА туловищем: с пола (голова у камеры) колени
-    // заметно выше плеч в кадре, таз не ниже плеч. Именно (3) отсекает момент
-    // вставания: там корпус кратковременно прямой, но колени уходят вперёд-вниз.
+    // (3) НОГИ ДАЛЬШЕ от камеры и ЗА туловищем. С камеры на полу близкие
+    // приподнятые плечи в кадре ВЫШЕ далёких колен, поэтому сигнал
+    // (плечи.y − колени.y)/торс в планке умеренно отрицательный (−2.6…−0.7);
+    // при вставании/на коленях плечи взлетают над коленями и сигнал резко
+    // падает (−3.4…−5) — полоса [min, max] отсекает этот момент.
     if (shoulder && hip && knee) {
       const torsoAngle = angleDeg(shoulder, hip, knee);
       const aspect = this.bodyAspect(pose);
@@ -266,8 +274,8 @@ export class RepDetector {
         torsoLen > 1e-6 ? (shoulder.y - knee.y) / torsoLen : null;
       const legsBehind =
         legsBehindFrac !== null &&
-        hip.y <= shoulder.y &&
-        legsBehindFrac >= this.cfg.legsBehindMinFrac;
+        legsBehindFrac >= this.cfg.legsBehindMinFrac &&
+        legsBehindFrac <= this.cfg.legsBehindMaxFrac;
       const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
       const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
       return {

@@ -211,10 +211,12 @@ async function main() {
       (dbg.legsBehind ? 'да' : 'нет') + '</b>' +
       ' &nbsp; колени↑плечи: <b>' + fmt(dbg.legsBehindFrac, 2) + '</b>' +
       ' &nbsp; диапазон: <b>' + rangeStr(legsMin, legsMax, 2) + '</b>' +
-      ' &nbsp; (порог ' + DEFAULT_CONFIG.legsBehindMinFrac + ')</div>' +
+      ' &nbsp; (полоса ' + DEFAULT_CONFIG.legsBehindMinFrac + '…' +
+      DEFAULT_CONFIG.legsBehindMaxFrac + ')</div>' +
       '<div>локоть: <b>' + fmt(dbg.elbowAngle, 0, '°') + '</b>' +
       ' &nbsp; диапазон: <b>' + rangeStr(elbowMin, elbowMax, 0) + '°</b>' +
-      ' &nbsp; (сгиб&lt;' + DEFAULT_CONFIG.elbowFlexedDeg +
+      ' &nbsp; (повтор в планке: сгиб&le;' + DEFAULT_CONFIG.plankElbowBendMaxDeg +
+      '; запасной: сгиб&lt;' + DEFAULT_CONFIG.elbowFlexedDeg +
       ' разгиб&gt;' + DEFAULT_CONFIG.elbowExtendedDeg + ')</div>' +
       '<div style="opacity:.6;font-size:.7em">клик — сбросить диапазоны и счётчик</div>';
 
