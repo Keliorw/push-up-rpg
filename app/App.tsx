@@ -6,16 +6,18 @@ import {MapScreen} from './src/screens/MapScreen';
 import {CardScreen} from './src/screens/CardScreen';
 import {WorkoutScreen} from './src/screens/WorkoutScreen';
 import {VictoryScreen} from './src/screens/VictoryScreen';
+import {CompleteScreen} from './src/screens/CompleteScreen';
 import {
   currentMonster,
   defeatMonster,
   INITIAL_PROGRESSION,
+  isGameComplete,
   Progression,
 } from './src/game/progression';
 import {loadProgression, saveProgression} from './src/storage/progressionStore';
 import {playVictory} from './src/sound';
 
-type Screen = 'start' | 'map' | 'card' | 'battle' | 'victory';
+type Screen = 'start' | 'map' | 'card' | 'battle' | 'victory' | 'complete';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
@@ -58,7 +60,15 @@ export default function App() {
         />
       )}
       {screen === 'victory' && (
-        <VictoryScreen name={defeatedName} onContinue={() => setScreen('map')} />
+        <VictoryScreen
+          name={defeatedName}
+          onContinue={() =>
+            setScreen(isGameComplete(progression) ? 'complete' : 'map')
+          }
+        />
+      )}
+      {screen === 'complete' && (
+        <CompleteScreen onContinue={() => setScreen('map')} />
       )}
     </SafeAreaProvider>
   );

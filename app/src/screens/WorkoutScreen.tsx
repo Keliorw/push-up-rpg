@@ -243,17 +243,58 @@ export function WorkoutScreen({
   const startRef = useRef(Date.now());
   const doneRef = useRef(false);
 
+  // Отдых между подходами босса (форсит restBetweenSetsSec; для босса 8 — строгие
+  // 3 минуты). Во время отдыха повторы не считаются (restingRef гейтит onPose).
+  const [resting, setResting] = useState(false);
+  const [restLeft, setRestLeft] = useState(0);
+  const restingRef = useRef(false);
+  const restTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const endRest = useCallback(() => {
+    if (restTimerRef.current) {
+      clearInterval(restTimerRef.current);
+      restTimerRef.current = null;
+    }
+    restingRef.current = false;
+    setResting(false);
+  }, []);
+
+  const startRest = useCallback(
+    (sec: number) => {
+      restingRef.current = true;
+      setResting(true);
+      setRestLeft(sec);
+      let left = sec;
+      restTimerRef.current = setInterval(() => {
+        left -= 1;
+        setRestLeft(left);
+        if (left <= 0) {
+          endRest();
+        }
+      }, 1000);
+    },
+    [endRest],
+  );
+
   useEffect(() => {
     const id = setInterval(() => setElapsed(Date.now() - startRef.current), 250);
     return () => clearInterval(id);
   }, []);
+
+  // Остановить таймер отдыха при уходе с экрана.
+  useEffect(() => () => endRest(), [endRest]);
 
   // Runs on the JS thread: feeds each counted rep into the game automaton
   // (sets/HP/defeat) instead of the plain rep counter this screen used
   // before it became the battle screen.
   const onPose = useCallback(
     (pose: Pose) => {
-      if (!monster || doneRef.current || wkRef.current === null) {
+      if (
+        !monster ||
+        doneRef.current ||
+        restingRef.current ||
+        wkRef.current === null
+      ) {
         return;
       }
       const events = detectorRef.current!.process(pose, Date.now());
@@ -270,10 +311,16 @@ export function WorkoutScreen({
         if (res.event === 'monsterDefeated') {
           doneRef.current = true;
           onDefeated();
+        } else if (
+          res.event === 'setComplete' &&
+          monster.restBetweenSetsSec > 0
+        ) {
+          startRest(monster.restBetweenSetsSec);
+          break; // пауза до конца отдыха — остальные события кадра не важны
         }
       }
     },
-    [monster, onDefeated],
+    [monster, onDefeated, startRest],
   );
 
   const [overlayPose, setOverlayPose] = useState<Pose>([]);
@@ -515,6 +562,16 @@ export function WorkoutScreen({
             pointerEvents="none">
             <Text style={battle.counterText}>{reps}</Text>
           </View>
+          {/* Экран отдыха между подходами */}
+          {resting && (
+            <View style={battle.restOverlay}>
+              <Text style={battle.restTitle}>Отдых</Text>
+              <Text style={battle.restTime}>{fmtTime(restLeft * 1000)}</Text>
+              <Pressable style={battle.restSkip} onPress={endRest}>
+                <Text style={battle.restSkipText}>Продолжить</Text>
+              </Pressable>
+            </View>
+          )}
         </>
       )}
     </View>
@@ -655,4 +712,24 @@ const battle = StyleSheet.create({
     justifyContent: 'center',
   },
   counterText: {color: '#101828', fontSize: 46, fontWeight: '900'},
+  restOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restTitle: {color: '#9aa4b2', fontSize: 18, letterSpacing: 3, marginBottom: 8},
+  restTime: {color: '#fff', fontSize: 64, fontWeight: '900'},
+  restSkip: {
+    marginTop: 28,
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 40,
+  },
+  restSkipText: {color: '#101828', fontSize: 18, fontWeight: '800'},
 });
