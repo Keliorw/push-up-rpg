@@ -14,8 +14,9 @@ function boss(
   name: string,
   cardImage: string,
   repsPerSet: number,
+  restBetweenSetsSec = 0,
 ): Monster {
-  return {id, name, kind: 'boss', cardImage, sets: 3, repsPerSet, restBetweenSetsSec: 0};
+  return {id, name, kind: 'boss', cardImage, sets: 3, repsPerSet, restBetweenSetsSec};
 }
 
 export const LOCATIONS: Location[] = [
@@ -52,16 +53,93 @@ export const LOCATIONS: Location[] = [
       boss('loc3-boss', 'Костяной страж', '3/boss.png', 10),
     ],
   },
+  {
+    index: 4,
+    name: 'Fetid Fog-Choked Swamp',
+    locked: false,
+    monsters: [
+      minion('loc4-m1', 'Одержимый труп', '4/oderdjimiy-tryp.png', 10),
+      minion('loc4-m2', 'Иллюзорный призрак', '4/ilyzonrniy-prizrak.png', 11),
+      minion('loc4-m3', 'Гнилостная пиявка', '4/gnilostnay-piyvka.png', 12),
+      boss('loc4-boss', 'Болотный Ужас', '4/boss.png', 12),
+    ],
+  },
+  {
+    index: 5,
+    name: 'Windswept Harpy Cliffs',
+    locked: false,
+    monsters: [
+      minion('loc5-m1', 'Одомашненный грифон', '5/odomashneniy-grifon.png', 11),
+      minion('loc5-m2', 'Пикирующая гарпия', '5/pikirushay-garpiy.png', 12),
+      minion('loc5-m3', 'Гарпия-сирена', '5/garpiy-sirena.png', 13),
+      boss('loc5-boss', 'Королева Гарпий', '5/boss.png', 13),
+    ],
+  },
+  {
+    index: 6,
+    name: 'Colossal Stone Minotaur Labyrinth',
+    locked: false,
+    monsters: [
+      minion('loc6-m1', 'Бронированный каменотес', '6/bronirovaniy-kamenotas.png', 12),
+      minion('loc6-m2', 'Дикий лабиринтный волк', '6/diki-labirintny-volk.png', 13),
+      minion('loc6-m3', 'Погонщик гоблинов', '6/pogonshik-goblinov.png', 14),
+      boss('loc6-boss', 'Разъяренный Минотавр-Лорд', '6/boss.png', 14),
+    ],
+  },
+  {
+    index: 7,
+    name: 'Iron Mechanical Fortress',
+    locked: false,
+    monsters: [
+      minion('loc7-m1', 'Каменная горгулья', '7/kamennay-gorguliy.png', 13),
+      minion('loc7-m2', 'Заводной паук', '7/zavodnoy-pauk.png', 14),
+      minion('loc7-m3', 'Магическая сфера', '7/magicheskay-sfera.png', 15),
+      boss('loc7-boss', 'Железный Голем-Разрушитель', '7/boss.png', 15),
+    ],
+  },
+  {
+    index: 8,
+    name: 'Blazing Volcanic Lava Fields',
+    locked: false,
+    monsters: [
+      minion('loc8-m1', 'Магматический слайм', '8/magmaticheskiy-slaym.png', 14),
+      minion('loc8-m2', 'Огненная саламандра', '8/ognenay-salamandra.png', 15),
+      minion('loc8-m3', 'Искра жизни', '8/iskra-zhizni.png', 16),
+      // Босс 8: отдых между подходами строго 3 минуты (180с) — по ТЗ.
+      boss('loc8-boss', 'Повелитель Пламени', '8/boss.png', 16, 180),
+    ],
+  },
+  {
+    index: 9,
+    name: 'Hellish Infernal Chasm',
+    locked: false,
+    monsters: [
+      minion('loc9-m1', 'Адская гончая', '9/adskay-gonchay.png', 15),
+      minion('loc9-m2', 'Бес-мучитель', '9/bas-muchitel.png', 16),
+      minion('loc9-m3', 'Суккуб', '9/sukub.png', 17),
+      boss('loc9-boss', 'Цербер, Страж Преисподней', '9/boss.png', 18),
+    ],
+  },
+  {
+    index: 10,
+    name: 'Finale: Blackened Death Mountain',
+    locked: false,
+    monsters: [
+      minion('loc10-m1', 'Драконид-гвардеец', '10/drakonid-gvardeic.png', 16),
+      minion('loc10-m2', 'Вылупившийся дракончик', '10/vylupvshijsya-drakonchik.png', 17),
+      minion("loc10-m3", 'Культист Дракона', "10/kul'tist-drakon.png", 18),
+      boss('loc10-boss', 'Древний Дракон Смерти', '10/drevniy-drakon-smerty.png', 20),
+    ],
+  },
 ];
 
 export const MONSTER_SEQUENCE: Monster[] = LOCATIONS.flatMap(l => l.monsters);
 
 /**
  * Центры узлов 1..10 как доли размера картинки карты (768×1376), снизу вверх.
- * Откалибровано по картинке; при необходимости уточняется вручную. Для MVP
- * геймплейно важны только 1–3; 4–10 показываются заблокированными.
+ * Все 10 локаций заполнены контентом. Откалибровано по кружкам на games/map.png
+ * (проверено наложением маркеров).
  */
-// Откалибровано по кружкам на games/map.png (проверено наложением маркеров).
 export const NODE_POSITIONS: {x: number; y: number}[] = [
   {x: 0.5, y: 0.915}, // 1  Plague Sewers (низ, центр)
   {x: 0.58, y: 0.805}, // 2  Goblin War-Camp

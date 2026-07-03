@@ -18,12 +18,12 @@ test('defeatMonster advances the pointer and stamps the date (immutably)', () =>
   expect(currentMonster(p1)!.id).toBe('loc1-m2');
 });
 
-test('after 12 defeats the game is complete, currentMonster is null', () => {
+test('after all 40 defeats the game is complete, currentMonster is null', () => {
   let p = INITIAL_PROGRESSION;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 40; i++) {
     p = defeatMonster(p, '2026-07-02');
   }
-  expect(p.defeatedCount).toBe(12);
+  expect(p.defeatedCount).toBe(40);
   expect(currentMonster(p)).toBeNull();
   expect(isGameComplete(p)).toBe(true);
 });
