@@ -14,6 +14,7 @@ import {mergeProfile, Profile} from './sync';
 import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
 import {openArena} from './arena-screen';
+import {ensureDetector} from './pose-model';
 
 export type ScreenId =
   | 'screen-auth'
@@ -89,8 +90,23 @@ const app: App = {
     show('screen-card');
   },
   goWorkout() {
-    show('screen-workout');
-    startWorkout(this);
+    show('screen-loading');
+    const loadingBack = document.getElementById('loading-back') as HTMLElement;
+    const loadingText = document.getElementById('loading-text') as HTMLElement;
+    loadingBack.style.display = 'none';
+    loadingText.textContent = 'Загрузка уровня…';
+    ensureDetector().then(
+      detector => {
+        // Если пользователь ушёл с экрана загрузки — не перебиваем.
+        if (!document.getElementById('screen-loading')!.classList.contains('active')) return;
+        show('screen-workout');
+        startWorkout(this, detector);
+      },
+      () => {
+        loadingText.textContent = 'Не удалось загрузить модель';
+        loadingBack.style.display = 'inline-block';
+      },
+    );
   },
   addRep() {
     this.totalReps += 1;
@@ -123,6 +139,7 @@ document.getElementById('btn-arena')!.addEventListener('click', () => {
   void openArena(currentUser ? currentUser.uid : null);
 });
 document.getElementById('arena-back')!.addEventListener('click', () => show('screen-start'));
+document.getElementById('loading-back')!.addEventListener('click', () => show('screen-start'));
 
 // Анимированный фон меню: статичная картинка -> видео, когда догрузится.
 // Бесшовный цикл через два ролика (double-buffer): пока играет активный,
@@ -220,4 +237,6 @@ onUser(async user => {
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show('screen-start');
+  // Предзагружаем MoveNet в фоне, чтобы к началу боя модель была готова.
+  void ensureDetector().catch(() => {});
 });

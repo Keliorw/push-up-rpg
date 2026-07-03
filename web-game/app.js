@@ -619,7 +619,7 @@ var EDGES = [
   [KP.rightHip, KP.rightKnee],
   [KP.rightKnee, KP.rightAnkle]
 ];
-function startWorkout(app3) {
+function startWorkout(app3, detector) {
   const found = currentMonster(app3.progression);
   if (!found) return;
   const monster = found;
@@ -641,7 +641,7 @@ function startWorkout(app3) {
   const maxHp = totalTarget(monster);
   const hitSound = new Audio("./games/hit.mp3");
   hitSound.volume = 0.6;
-  const detector = new RepDetector(DEFAULT_CONFIG);
+  const repDetector = new RepDetector(DEFAULT_CONFIG);
   let wk = newWorkout(monster);
   let resting = false;
   let finished = false;
@@ -750,13 +750,7 @@ function startWorkout(app3) {
     });
     video.srcObject = stream;
     await video.play();
-    statusEl.textContent = "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044E \u043C\u043E\u0434\u0435\u043B\u044C\u2026";
-    await tf.setBackend("webgl");
-    await tf.ready();
-    const det = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-    );
+    const det = detector;
     statusEl.textContent = "\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430";
     async function loop() {
       if (finished) {
@@ -772,7 +766,7 @@ function startWorkout(app3) {
           pose.push({ x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0 });
         }
         if (!resting) {
-          const events = detector.process(pose, performance.now());
+          const events = repDetector.process(pose, performance.now());
           for (const e of events) {
             if (e === "repCounted") handleRep();
           }
@@ -1039,6 +1033,24 @@ async function openArena(currentUid) {
   }
 }
 
+// web-game/src/pose-model.ts
+var detectorPromise = null;
+function ensureDetector() {
+  if (!detectorPromise) {
+    detectorPromise = (async () => {
+      await tf.setBackend("webgl");
+      await tf.ready();
+      return poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+      });
+    })().catch((err) => {
+      detectorPromise = null;
+      throw err;
+    });
+  }
+  return detectorPromise;
+}
+
 // web-game/src/main.ts
 function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
@@ -1085,8 +1097,22 @@ var app2 = {
     show("screen-card");
   },
   goWorkout() {
-    show("screen-workout");
-    startWorkout(this);
+    show("screen-loading");
+    const loadingBack = document.getElementById("loading-back");
+    const loadingText = document.getElementById("loading-text");
+    loadingBack.style.display = "none";
+    loadingText.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0440\u043E\u0432\u043D\u044F\u2026";
+    ensureDetector().then(
+      (detector) => {
+        if (!document.getElementById("screen-loading").classList.contains("active")) return;
+        show("screen-workout");
+        startWorkout(this, detector);
+      },
+      () => {
+        loadingText.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u043E\u0434\u0435\u043B\u044C";
+        loadingBack.style.display = "inline-block";
+      }
+    );
   },
   addRep() {
     this.totalReps += 1;
@@ -1115,6 +1141,7 @@ document.getElementById("btn-arena").addEventListener("click", () => {
   void openArena(currentUser ? currentUser.uid : null);
 });
 document.getElementById("arena-back").addEventListener("click", () => show("screen-start"));
+document.getElementById("loading-back").addEventListener("click", () => show("screen-start"));
 var menuVids = [
   document.getElementById("menu-bg-video"),
   document.getElementById("menu-bg-video-b")
@@ -1192,4 +1219,6 @@ onUser(async (user) => {
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show("screen-start");
+  void ensureDetector().catch(() => {
+  });
 });

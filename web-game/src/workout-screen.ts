@@ -10,9 +10,6 @@ import {
 } from '../../app/src/game/workout';
 import type {App} from './main';
 
-declare const tf: any;
-declare const poseDetection: any;
-
 const KEYPOINT_COUNT = 17;
 const MIN_SCORE = 0.3;
 const EDGES: Array<[number, number]> = [
@@ -32,7 +29,7 @@ const EDGES: Array<[number, number]> = [
   [KP.rightKnee, KP.rightAnkle],
 ];
 
-export function startWorkout(app: App): void {
+export function startWorkout(app: App, detector: any): void {
   const found = currentMonster(app.progression);
   if (!found) return;
   const monster = found;
@@ -61,7 +58,7 @@ export function startWorkout(app: App): void {
   const hitSound = new Audio('./games/hit.mp3');
   hitSound.volume = 0.6;
 
-  const detector = new RepDetector(DEFAULT_CONFIG);
+  const repDetector = new RepDetector(DEFAULT_CONFIG);
   let wk: WorkoutState = newWorkout(monster);
   let resting = false;
   let finished = false;
@@ -182,13 +179,7 @@ export function startWorkout(app: App): void {
     });
     video.srcObject = stream;
     await video.play();
-    statusEl.textContent = 'Загружаю модель…';
-    await tf.setBackend('webgl');
-    await tf.ready();
-    const det = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      {modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING},
-    );
+    const det = detector; // модель уже загружена (экран загрузки)
     statusEl.textContent = 'Займи упор лёжа';
 
     async function loop() {
@@ -205,7 +196,7 @@ export function startWorkout(app: App): void {
           pose.push({x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0});
         }
         if (!resting) {
-          const events = detector.process(pose, performance.now());
+          const events = repDetector.process(pose, performance.now());
           for (const e of events) {
             if (e === 'repCounted') handleRep();
           }
