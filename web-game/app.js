@@ -273,6 +273,7 @@ var DEFAULT_CONFIG = {
   minRepDurationMs: 700,
   plankBodyMinAngleDeg: 140,
   maxBodyAspect: 2.5,
+  legsBehindMinFrac: 0.5,
   descentDownFrac: 0.14,
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
@@ -343,7 +344,9 @@ var RepDetector = class {
     descent: null,
     phase: "up",
     visibleKeypoints: 0,
-    bodyAspect: null
+    bodyAspect: null,
+    legsBehindFrac: null,
+    legsBehind: false
   };
   process(pose, tMs) {
     this.debug.visibleKeypoints = this.countVisible(pose);
@@ -351,6 +354,8 @@ var RepDetector = class {
     const gate = this.evaluateGate(pose);
     this.debug.gateMode = gate.mode;
     this.debug.torsoAngle = gate.torsoAngle;
+    this.debug.legsBehindFrac = gate.legsBehindFrac;
+    this.debug.legsBehind = gate.legsBehind;
     if (!gate.inPosition) {
       if (this.state !== "noPosition" && tMs - this.lastGoodMs <= this.cfg.gateLostGraceMs) {
         return [];
@@ -492,9 +497,18 @@ var RepDetector = class {
     if (shoulder && hip && knee) {
       const torsoAngle = angleDeg(shoulder, hip, knee);
       const aspect = this.bodyAspect(pose);
+      const torsoLen = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+      const legsBehindFrac = torsoLen > 1e-6 ? (shoulder.y - knee.y) / torsoLen : null;
+      const legsBehind = legsBehindFrac !== null && hip.y <= shoulder.y && legsBehindFrac >= this.cfg.legsBehindMinFrac;
       const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
       const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
-      return { inPosition: straight && horizontal, mode: "plank", torsoAngle };
+      return {
+        inPosition: straight && horizontal && legsBehind,
+        mode: "plank",
+        torsoAngle,
+        legsBehindFrac,
+        legsBehind
+      };
     }
     if (shoulder) {
       for (const arm of ARMS) {
@@ -502,11 +516,23 @@ var RepDetector = class {
         const e = this.vis(pose, arm.elbow);
         const w = this.vis(pose, arm.wrist);
         if (s && e && w && w.y > s.y) {
-          return { inPosition: true, mode: "fallback", torsoAngle: null };
+          return {
+            inPosition: true,
+            mode: "fallback",
+            torsoAngle: null,
+            legsBehindFrac: null,
+            legsBehind: false
+          };
         }
       }
     }
-    return { inPosition: false, mode: "none", torsoAngle: null };
+    return {
+      inPosition: false,
+      mode: "none",
+      torsoAngle: null,
+      legsBehindFrac: null,
+      legsBehind: false
+    };
   }
   /** Сглаженный средний угол локтя по видимым рукам; null если рук нет. */
   updateElbow(pose) {

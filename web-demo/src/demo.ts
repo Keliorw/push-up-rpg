@@ -122,7 +122,13 @@ let descentMin = Infinity;
 let descentMax = -Infinity;
 let elbowMin = Infinity;
 let elbowMax = -Infinity;
-function trackRanges(descent: number | null, elbow: number | null) {
+let legsMin = Infinity;
+let legsMax = -Infinity;
+function trackRanges(
+  descent: number | null,
+  elbow: number | null,
+  legsBehindFrac: number | null,
+) {
   if (descent != null) {
     descentMin = Math.min(descentMin, descent);
     descentMax = Math.max(descentMax, descent);
@@ -130,6 +136,10 @@ function trackRanges(descent: number | null, elbow: number | null) {
   if (elbow != null) {
     elbowMin = Math.min(elbowMin, elbow);
     elbowMax = Math.max(elbowMax, elbow);
+  }
+  if (legsBehindFrac != null) {
+    legsMin = Math.min(legsMin, legsBehindFrac);
+    legsMax = Math.max(legsMax, legsBehindFrac);
   }
 }
 function rangeStr(min: number, max: number, digits: number): string {
@@ -141,6 +151,8 @@ document.body.addEventListener('click', () => {
   descentMax = -Infinity;
   elbowMin = Infinity;
   elbowMax = -Infinity;
+  legsMin = Infinity;
+  legsMax = -Infinity;
   reps = 0;
 });
 
@@ -180,7 +192,7 @@ async function main() {
 
     // Live detector signals — use these to calibrate config.ts thresholds.
     const dbg = detectorLogic.debug;
-    trackRanges(dbg.descent, dbg.elbowAngle);
+    trackRanges(dbg.descent, dbg.elbowAngle, dbg.legsBehindFrac);
     const posColor = dbg.inPosition ? '#5ad469' : '#ff6b6b';
     debugEl.innerHTML =
       '<div>гейт: <b>' + dbg.gateMode + '</b>' +
@@ -194,6 +206,12 @@ async function main() {
       '<div>проседание: <b>' + fmt(dbg.descent, 2) + '</b>' +
       ' &nbsp; макс за подход: <b>' + rangeStr(descentMin, descentMax, 2) + '</b>' +
       ' &nbsp; (порог ' + DEFAULT_CONFIG.descentDownFrac + ')</div>' +
+      '<div>ноги за корпусом: <b style="color:' +
+      (dbg.legsBehind ? '#5ad469' : '#ff6b6b') + '">' +
+      (dbg.legsBehind ? 'да' : 'нет') + '</b>' +
+      ' &nbsp; колени↑плечи: <b>' + fmt(dbg.legsBehindFrac, 2) + '</b>' +
+      ' &nbsp; диапазон: <b>' + rangeStr(legsMin, legsMax, 2) + '</b>' +
+      ' &nbsp; (порог ' + DEFAULT_CONFIG.legsBehindMinFrac + ')</div>' +
       '<div>локоть: <b>' + fmt(dbg.elbowAngle, 0, '°') + '</b>' +
       ' &nbsp; диапазон: <b>' + rangeStr(elbowMin, elbowMax, 0) + '°</b>' +
       ' &nbsp; (сгиб&lt;' + DEFAULT_CONFIG.elbowFlexedDeg +
