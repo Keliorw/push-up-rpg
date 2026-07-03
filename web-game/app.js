@@ -273,7 +273,9 @@ var DEFAULT_CONFIG = {
   minRepDurationMs: 700,
   plankBodyMinAngleDeg: 140,
   maxBodyAspect: 2.5,
-  legsBehindMinFrac: 0.5,
+  legsBehindMinFrac: -3,
+  legsBehindMaxFrac: 3,
+  plankElbowBendMaxDeg: 150,
   descentDownFrac: 0.14,
   descentUpFrac: 0.05,
   descentSmoothing: 0.5,
@@ -399,13 +401,18 @@ var RepDetector = class {
         return [];
     }
   }
-  // В планке (видно тело+ноги) счёт ведётся ТОЛЬКО по проседанию корпуса —
-  // это отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
-  // проседания → не считается). Угол локтя используется лишь в запасном
-  // режиме, когда ног в кадре нет и проседание вычислить нельзя.
+  // В планке (видно тело+ноги) счёт ведётся по проседанию корпуса — это
+  // отсекает «на коленях просто сгибаю руки» (торс не опускается → нет
+  // проседания → не считается). Если руки видны, «вниз» дополнительно требует
+  // согнутого локтя: при вставании из упора проседание пересекает порог, но
+  // руки остаются прямыми (~175°) — реальный повтор сгибает локоть до 119–137°.
+  // Угол локтя как ЕДИНСТВЕННЫЙ сигнал используется лишь в запасном режиме,
+  // когда ног в кадре нет и проседание вычислить нельзя.
   isDown(mode2, elbow, descent) {
     if (mode2 === "plank") {
-      return descent !== null && descent >= this.cfg.descentDownFrac;
+      const descended = descent !== null && descent >= this.cfg.descentDownFrac;
+      const elbowOk = elbow === null || elbow <= this.cfg.plankElbowBendMaxDeg;
+      return descended && elbowOk;
     }
     return elbow !== null && elbow <= this.cfg.elbowFlexedDeg;
   }
@@ -499,7 +506,7 @@ var RepDetector = class {
       const aspect = this.bodyAspect(pose);
       const torsoLen = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
       const legsBehindFrac = torsoLen > 1e-6 ? (shoulder.y - knee.y) / torsoLen : null;
-      const legsBehind = legsBehindFrac !== null && hip.y <= shoulder.y && legsBehindFrac >= this.cfg.legsBehindMinFrac;
+      const legsBehind = legsBehindFrac !== null && legsBehindFrac >= this.cfg.legsBehindMinFrac && legsBehindFrac <= this.cfg.legsBehindMaxFrac;
       const straight = torsoAngle >= this.cfg.plankBodyMinAngleDeg;
       const horizontal = aspect !== null && aspect <= this.cfg.maxBodyAspect;
       return {
