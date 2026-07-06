@@ -738,6 +738,7 @@ function startWorkout(app3, detector) {
     aborted = true;
     stopTimer();
     if (camera) camera.stop();
+    restEl.style.display = "none";
     app3.persistProfile();
     app3.render();
     app3.show("screen-map");
