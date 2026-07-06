@@ -21,12 +21,15 @@ export function mergeProgress(a: Progression, b: Progression): Progression {
 export interface Profile {
   progression: Progression;
   totalReps: number;
+  /** Лучший результат арены — число убитых мобов за забег. */
+  bestArena: number;
 }
 
-/** Объединяет полный профиль (прогресс + XP), ничего не откатывая. */
+/** Объединяет полный профиль (прогресс + XP + рекорд арены), ничего не откатывая. */
 export function mergeProfile(a: Profile, b: Profile): Profile {
   return {
     progression: mergeProgress(a.progression, b.progression),
     totalReps: Math.max(a.totalReps, b.totalReps),
+    bestArena: Math.max(a.bestArena, b.bestArena),
   };
 }
