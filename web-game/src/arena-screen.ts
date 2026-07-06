@@ -19,12 +19,9 @@ function rowHtml(row: LeaderRow, rank: number, isMe: boolean): string {
   );
 }
 
-/** Грузит топ-50, до-сортировывает по XP, рендерит и показывает экран Арены. */
-export async function openArena(currentUid: string | null): Promise<void> {
-  const list = document.getElementById('arena-list')!;
+/** Грузит топ-50, до-сортировывает по XP и рендерит строки в переданный контейнер. */
+async function renderLeaderboard(list: HTMLElement, currentUid: string | null): Promise<void> {
   list.textContent = 'Загрузка…';
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-arena')!.classList.add('active');
   try {
     const rows = await loadLeaderboard(50);
     rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps);
@@ -38,4 +35,22 @@ export async function openArena(currentUid: string | null): Promise<void> {
   } catch {
     list.innerHTML = '<div id="arena-empty">Не удалось загрузить рейтинг</div>';
   }
+}
+
+/** Полноэкранный экран Арены (из главного меню). */
+export async function openArena(currentUid: string | null): Promise<void> {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-arena')!.classList.add('active');
+  await renderLeaderboard(document.getElementById('arena-list')!, currentUid);
+}
+
+/** Рейтинг модалкой поверх текущего экрана (с карты). */
+export async function openArenaModal(currentUid: string | null): Promise<void> {
+  (document.getElementById('arena-modal') as HTMLElement).hidden = false;
+  await renderLeaderboard(document.getElementById('arena-modal-list')!, currentUid);
+}
+
+/** Закрыть модалку рейтинга. */
+export function closeArenaModal(): void {
+  (document.getElementById('arena-modal') as HTMLElement).hidden = true;
 }

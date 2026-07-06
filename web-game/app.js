@@ -1016,11 +1016,8 @@ function rowHtml(row, rank, isMe) {
   const locText = loc.index != null ? `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${loc.index} \xB7 ${esc(loc.name)}` : esc(loc.name);
   return `<div class="arena-row${isMe ? " me" : ""}"><div class="rank">${rank}</div><div class="who"><b>${esc(row.nickname)}</b><span>${locText}</span></div><div class="xp">${row.totalReps} XP</div></div>`;
 }
-async function openArena(currentUid) {
-  const list = document.getElementById("arena-list");
+async function renderLeaderboard(list, currentUid) {
   list.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026";
-  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-  document.getElementById("screen-arena").classList.add("active");
   try {
     const rows = await loadLeaderboard(50);
     rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps);
@@ -1032,6 +1029,18 @@ async function openArena(currentUid) {
   } catch {
     list.innerHTML = '<div id="arena-empty">\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0435\u0439\u0442\u0438\u043D\u0433</div>';
   }
+}
+async function openArena(currentUid) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  document.getElementById("screen-arena").classList.add("active");
+  await renderLeaderboard(document.getElementById("arena-list"), currentUid);
+}
+async function openArenaModal(currentUid) {
+  document.getElementById("arena-modal").hidden = false;
+  await renderLeaderboard(document.getElementById("arena-modal-list"), currentUid);
+}
+function closeArenaModal() {
+  document.getElementById("arena-modal").hidden = true;
 }
 
 // web-game/src/pose-model.ts
@@ -1195,6 +1204,17 @@ document.getElementById("card-back-btn").addEventListener("click", () => {
 });
 document.getElementById("card-start-btn").addEventListener("click", () => app2.goWorkout());
 document.getElementById("map-back").addEventListener("click", () => show("screen-start"));
+document.getElementById("map-rating").addEventListener("click", () => {
+  void openArenaModal(currentUser ? currentUser.uid : null);
+});
+var arenaModal = document.getElementById("arena-modal");
+document.getElementById("arena-modal-close").addEventListener("click", closeArenaModal);
+arenaModal.addEventListener("click", (e) => {
+  if (e.target === arenaModal) closeArenaModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !arenaModal.hidden) closeArenaModal();
+});
 document.getElementById("btn-logout").addEventListener("click", () => {
   void logout();
 });
