@@ -30,6 +30,7 @@ export function startWorkout(app: App, detector: any): void {
 
   let wk: WorkoutState = newWorkout(monster);
   let camera: BattleCamera | null = null;
+  let aborted = false; // выход нажат до готовности камеры — остановить её по готовности
 
   // Таймер уровня (сколько заняло прохождение) — слева сверху, растущий.
   const startMs = performance.now();
@@ -43,6 +44,7 @@ export function startWorkout(app: App, detector: any): void {
   const stopTimer = () => window.clearInterval(timerId);
 
   backBtn.onclick = () => {
+    aborted = true;
     stopTimer();
     if (camera) camera.stop();
     app.persistProfile(); // XP из этого боя (даже без победы) уходит в облако
@@ -114,6 +116,7 @@ export function startWorkout(app: App, detector: any): void {
   }).then(
     cam => {
       camera = cam;
+      if (aborted) cam.stop(); // пользователь вышел, пока грузилась камера
     },
     err => {
       statusEl.textContent = 'Ошибка: ' + (err?.message ?? String(err));
