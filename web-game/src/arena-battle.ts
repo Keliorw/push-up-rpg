@@ -139,6 +139,7 @@ function runArena(app: App, detector: any): void {
     ended = true;
     window.clearInterval(mobTimerId);
     restEl.style.display = 'none'; // остановить тикер отдыха, если ✕/таймаут пришли во время rest
+    timeEl.style.color = '#fff'; // сбросить красный, чтобы не протёк в бой кампании
     if (camera) camera.stop();
     const kills = state.kills;
     const isRecord = kills > app.bestArena;
