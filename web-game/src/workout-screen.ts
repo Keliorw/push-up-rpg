@@ -47,6 +47,7 @@ export function startWorkout(app: App, detector: any): void {
     aborted = true;
     stopTimer();
     if (camera) camera.stop();
+    restEl.style.display = 'none'; // погасить осиротевший оверлей отдыха (общий #wk-rest)
     app.persistProfile(); // XP из этого боя (даже без победы) уходит в облако
     app.render();
     app.show('screen-map');

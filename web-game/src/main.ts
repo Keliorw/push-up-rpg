@@ -15,7 +15,7 @@ import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
 import {openXpRatingModal, closeArenaModal} from './arena-screen';
 import {loadBestArena, saveBestArena} from './storage';
-import {openArenaLobby, showArenaPreview, initArenaLobby} from './arena-lobby';
+import {openArenaLobby, initArenaLobby} from './arena-lobby';
 import {ensureDetector} from './pose-model';
 import {startArenaFlow} from './arena-battle';
 
