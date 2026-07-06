@@ -13,29 +13,36 @@ import {loadRemote, saveRemote} from './remote-storage';
 import {mergeProfile, Profile} from './sync';
 import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
-import {openArena, openArenaModal, closeArenaModal} from './arena-screen';
+import {openXpRatingModal, closeArenaModal} from './arena-screen';
+import {loadBestArena, saveBestArena} from './storage';
+import {openArenaLobby, initArenaLobby} from './arena-lobby';
 import {ensureDetector} from './pose-model';
+import {startArenaFlow} from './arena-battle';
 
 export type ScreenId =
   | 'screen-auth'
   | 'screen-loading'
-  | 'screen-arena'
   | 'screen-start'
   | 'screen-map'
   | 'screen-card'
   | 'screen-workout'
-  | 'screen-victory';
+  | 'screen-victory'
+  | 'screen-arena-lobby'
+  | 'screen-arena-result';
 
 export interface App {
   progression: Progression;
   totalReps: number;
+  bestArena: number;
   show(id: ScreenId): void;
   render(): void;
   goCard(): void;
   goWorkout(): void;
+  goArenaBattle(): void;
   addRep(): void; // +1 XP за отжимание (локально)
   persistProfile(): void; // синхронизировать профиль (прогресс+XP) в Firestore
   onDefeated(): void; // called by the workout screen on monster defeat
+  currentUid(): string | null;
 }
 
 function show(id: ScreenId): void {
@@ -82,13 +89,23 @@ function showSyncWarning(): void {
 const app: App = {
   progression: loadProgression(),
   totalReps: loadTotalReps(),
+  bestArena: loadBestArena(),
   show,
   render() {
     renderMap(this);
   },
   goCard() {
     renderCard(this);
-    show('screen-card');
+    const startBtn = document.getElementById('card-start-btn') as HTMLButtonElement;
+    const backBtn = document.getElementById('card-back-btn') as HTMLButtonElement;
+    const startSpan = startBtn.querySelector('span') as HTMLElement;
+    startSpan.textContent = 'Начать тренировку';
+    startBtn.onclick = () => this.goWorkout();
+    backBtn.onclick = () => {
+      this.render();
+      this.show('screen-map');
+    };
+    this.show('screen-card');
   },
   goWorkout() {
     show('screen-loading');
@@ -115,8 +132,18 @@ const app: App = {
   },
   persistProfile() {
     if (!currentUser) return;
-    const profile: Profile = {progression: this.progression, totalReps: this.totalReps};
+    const profile: Profile = {
+      progression: this.progression,
+      totalReps: this.totalReps,
+      bestArena: this.bestArena,
+    };
     saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
+  },
+  currentUid() {
+    return currentUser ? currentUser.uid : null;
+  },
+  goArenaBattle() {
+    startArenaFlow(this);
   },
   onDefeated() {
     const m = currentMonster(this.progression);
@@ -137,12 +164,10 @@ document.getElementById('btn-campaign')!.addEventListener('click', () => {
   show('screen-map');
 });
 
-// MAIN MENU: «Arena» -> рейтинг
-document.getElementById('btn-arena')!.addEventListener('click', () => {
-  void openArena(currentUser ? currentUser.uid : null);
-});
-document.getElementById('arena-back')!.addEventListener('click', () => show('screen-start'));
+// MAIN MENU: «Arena» -> лобби арены
+document.getElementById('btn-arena')!.addEventListener('click', () => openArenaLobby(app));
 document.getElementById('loading-back')!.addEventListener('click', () => show('screen-start'));
+initArenaLobby(app);
 
 // Анимированный фон меню: статичная картинка -> видео, когда догрузится.
 // Бесшовный цикл через два ролика (double-buffer): пока играет активный,
@@ -199,18 +224,12 @@ document.getElementById('victory-map')!.addEventListener('click', () => {
   app.render();
   show('screen-map');
 });
-// CARD back / start
-document.getElementById('card-back-btn')!.addEventListener('click', () => {
-  app.render();
-  show('screen-map');
-});
-document.getElementById('card-start-btn')!.addEventListener('click', () => app.goWorkout());
 // MAP: возврат в главное меню
 document.getElementById('map-back')!.addEventListener('click', () => show('screen-start'));
 
 // MAP: рейтинг модалкой (правый верхний угол). Закрытие — крестик / фон / Esc.
 document.getElementById('map-rating')!.addEventListener('click', () => {
-  void openArenaModal(currentUser ? currentUser.uid : null);
+  void openXpRatingModal(currentUser ? currentUser.uid : null);
 });
 const arenaModal = document.getElementById('arena-modal')!;
 document.getElementById('arena-modal-close')!.addEventListener('click', closeArenaModal);
@@ -238,7 +257,11 @@ onUser(async user => {
   }
   // Вошли: тянем облако, мёржим с локальным (прогресс не откатывается),
   // пишем результат в оба хранилища.
-  const local: Profile = {progression: loadProgression(), totalReps: loadTotalReps()};
+  const local: Profile = {
+    progression: loadProgression(),
+    totalReps: loadTotalReps(),
+    bestArena: loadBestArena(),
+  };
   let remote: Profile | null = null;
   try {
     remote = await loadRemote(user.uid);
@@ -248,8 +271,10 @@ onUser(async user => {
   const merged = remote ? mergeProfile(local, remote) : local;
   app.progression = merged.progression;
   app.totalReps = merged.totalReps;
+  app.bestArena = merged.bestArena;
   saveProgression(merged.progression);
   saveTotalReps(merged.totalReps);
+  saveBestArena(merged.bestArena);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show('screen-start');

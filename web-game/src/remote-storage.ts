@@ -8,6 +8,7 @@ import {
   orderBy,
   limit,
   getDocs,
+  where,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import {db} from './firebase';
 import type {Profile} from './sync';
@@ -29,6 +30,7 @@ export async function loadRemote(uid: string): Promise<Profile | null> {
       lastWorkoutDate: typeof d.lastWorkoutDate === 'string' ? d.lastWorkoutDate : null,
     },
     totalReps: typeof d.totalReps === 'number' ? d.totalReps : 0,
+    bestArena: typeof d.bestArena === 'number' ? d.bestArena : 0,
   };
 }
 
@@ -40,6 +42,7 @@ export async function saveRemote(uid: string, profile: Profile, nickname: string
       defeatedCount: profile.progression.defeatedCount,
       lastWorkoutDate: profile.progression.lastWorkoutDate,
       totalReps: profile.totalReps,
+      bestArena: profile.bestArena,
       updatedAt: serverTimestamp(),
     },
     {merge: true},
@@ -58,6 +61,33 @@ export async function loadLeaderboard(max: number): Promise<LeaderRow[]> {
       nickname: typeof d.nickname === 'string' && d.nickname ? d.nickname : '—',
       defeatedCount: typeof d.defeatedCount === 'number' ? d.defeatedCount : 0,
       totalReps: typeof d.totalReps === 'number' ? d.totalReps : 0,
+    });
+  });
+  return rows;
+}
+
+export interface ArenaLeaderRow {
+  uid: string;
+  nickname: string;
+  kills: number;
+}
+
+/** Топ игроков арены по лучшему результату (числу убитых мобов). */
+export async function loadArenaLeaderboard(max: number): Promise<ArenaLeaderRow[]> {
+  const q = query(
+    collection(db, 'users'),
+    where('bestArena', '>', 0),
+    orderBy('bestArena', 'desc'),
+    limit(max),
+  );
+  const snap = await getDocs(q);
+  const rows: ArenaLeaderRow[] = [];
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    rows.push({
+      uid: docSnap.id,
+      nickname: typeof d.nickname === 'string' && d.nickname ? d.nickname : '—',
+      kills: typeof d.bestArena === 'number' ? d.bestArena : 0,
     });
   });
   return rows;

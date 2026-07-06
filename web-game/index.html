@@ -184,9 +184,6 @@
         border: 1px solid #3a4a67; border-radius: 20px; padding: 4px 6px 4px 12px; }
       #account-nick { font-size: 13px; font-weight: 700; color: #fff; }
       /* ARENA */
-      #screen-arena { min-height: 100vh; background: #101828; }
-      #arena-box { max-width: 480px; margin: 0 auto; padding: 16px; }
-      #arena-box h1 { color: #F5A623; text-align: center; font-size: 26px; margin: 8px 0 16px; }
       .arena-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center;
         padding: 10px 12px; border-bottom: 1px solid #24314a; font-size: 14px; }
       .arena-row .rank { color: #9aa4b2; font-weight: 800; text-align: right; }
@@ -207,6 +204,43 @@
       #arena-modal-close { position: absolute; top: 10px; right: 10px;
         width: 36px; height: 36px; border-radius: 50%; background: rgba(11,17,31,.85);
         border: 1px solid #3a4a67; color: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+      /* ARENA LOBBY */
+      #screen-arena-lobby.active { display: flex; }
+      #screen-arena-lobby { position: relative; height: 100vh; overflow: hidden;
+        align-items: center; justify-content: center; }
+      #arena-lobby-bg { position: absolute; inset: 0; z-index: 0; }
+      #arena-lobby-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #arena-lobby-center { position: relative; z-index: 1; display: flex;
+        flex-direction: column; align-items: center; gap: 16px; padding: 0 20px; }
+      #arena-lobby-start { width: 78%; max-width: 340px; aspect-ratio: 600 / 403;
+        border: none; background: transparent url('./games/arena-start-button.png') center/100% 100% no-repeat;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: transform .1s ease; filter: drop-shadow(0 4px 14px rgba(0,0,0,.7)); }
+      #arena-lobby-start span { font-family: Georgia, 'Times New Roman', serif; font-weight: 800;
+        letter-spacing: 1px; text-transform: uppercase; font-size: clamp(18px, 5.5vw, 26px);
+        color: #f6e9c8; text-shadow: 0 2px 3px #3a2408, 0 0 10px rgba(0,0,0,.6); }
+      #arena-lobby-start:active { transform: translateY(1px) scale(.98); }
+      #arena-best { z-index: 1; color: #f6e9c8; font-size: 16px; font-weight: 800;
+        text-shadow: 0 2px 6px #000; }
+      /* угловые кнопки лобби — как на карте */
+      #arena-lobby-back { position: absolute; top: 10px; left: 10px; z-index: 5;
+        width: 56px; height: 56px; padding: 0; border: none; background: none;
+        cursor: pointer; transition: transform .1s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+      #arena-lobby-back img { width: 100%; height: 100%; display: block; }
+      #arena-lobby-back:active { transform: scale(.93); }
+      #arena-lobby-rating { position: absolute; top: 10px; right: 10px; z-index: 5;
+        width: 56px; height: 56px; padding: 0; border: none; background: none;
+        cursor: pointer; transition: transform .1s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+      #arena-lobby-rating img { width: 100%; height: 100%; display: block; }
+      #arena-lobby-rating:active { transform: scale(.93); }
+      /* ARENA RESULT */
+      #screen-arena-result { text-align: center; padding-top: 22vh; }
+      #screen-arena-result h1 { color: #F5A623; font-size: 34px; font-weight: 900; margin: 0 0 8px; }
+      #arena-result-kills { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+      #arena-result-record { color: #9aa4b2; font-size: 15px; min-height: 20px; }
+      #arena-result-actions { display: flex; flex-direction: column; align-items: center;
+        gap: 12px; margin-top: 26px; }
+      #arena-result-lobby { background: #24314a; color: #fff; }
       /* LOADING */
       #screen-loading { min-height: 100vh; display: none; }
       #screen-loading.active { display: flex; align-items: center; justify-content: center; }
@@ -313,20 +347,36 @@
         <div id="wk-rest"></div>
       </section>
 
-      <section id="screen-arena" class="screen">
-        <div id="arena-box">
-          <button id="arena-back" class="link-btn">← В меню</button>
-          <h1>Рейтинг</h1>
-          <div id="arena-list">Загрузка…</div>
-        </div>
-      </section>
-
       <section id="screen-victory" class="screen">
         <h1>Повержен!</h1>
         <div id="victory-name"></div>
         <div id="victory-actions">
           <button class="btn" id="victory-next">Следующий монстр</button>
           <button class="btn" id="victory-map">На карту</button>
+        </div>
+      </section>
+
+      <section id="screen-arena-lobby" class="screen">
+        <div id="arena-lobby-bg"><img src="./games/arena-bg.png" alt="" /></div>
+        <button id="arena-lobby-back" aria-label="В меню">
+          <img src="./games/back-in-map.png" alt="" />
+        </button>
+        <button id="arena-lobby-rating" aria-label="Рейтинг арены">
+          <img src="./games/rating.png" alt="" />
+        </button>
+        <div id="arena-lobby-center">
+          <button id="arena-lobby-start"><span>Let's do it</span></button>
+          <div id="arena-best" style="display:none"></div>
+        </div>
+      </section>
+
+      <section id="screen-arena-result" class="screen">
+        <h1>Забег окончен</h1>
+        <div id="arena-result-kills"></div>
+        <div id="arena-result-record"></div>
+        <div id="arena-result-actions">
+          <button class="btn" id="arena-result-again">Ещё раз</button>
+          <button class="btn" id="arena-result-lobby">В лобби</button>
         </div>
       </section>
 

@@ -45,9 +45,19 @@ test('обе даты null → null', () => {
 test('mergeProfile: прогресс и XP не откатываются', () => {
   assert.deepEqual(
     mergeProfile(
-      {progression: {defeatedCount: 3, lastWorkoutDate: '2026-07-01'}, totalReps: 120},
-      {progression: {defeatedCount: 5, lastWorkoutDate: '2026-06-30'}, totalReps: 90},
+      {progression: {defeatedCount: 3, lastWorkoutDate: '2026-07-01'}, totalReps: 120, bestArena: 0},
+      {progression: {defeatedCount: 5, lastWorkoutDate: '2026-06-30'}, totalReps: 90, bestArena: 0},
     ),
-    {progression: {defeatedCount: 5, lastWorkoutDate: '2026-07-01'}, totalReps: 120},
+    {progression: {defeatedCount: 5, lastWorkoutDate: '2026-07-01'}, totalReps: 120, bestArena: 0},
+  );
+});
+
+test('mergeProfile: bestArena берётся по максимуму, не откатывается', () => {
+  assert.deepEqual(
+    mergeProfile(
+      {progression: {defeatedCount: 3, lastWorkoutDate: '2026-07-01'}, totalReps: 120, bestArena: 8},
+      {progression: {defeatedCount: 5, lastWorkoutDate: '2026-06-30'}, totalReps: 90, bestArena: 3},
+    ),
+    {progression: {defeatedCount: 5, lastWorkoutDate: '2026-07-01'}, totalReps: 120, bestArena: 8},
   );
 });

@@ -188,6 +188,15 @@ function loadTotalReps() {
 function saveTotalReps(n) {
   localStorage.setItem(XP_KEY, String(Math.max(0, Math.floor(n))));
 }
+var BEST_ARENA_KEY = "pushuprpg.bestArena";
+function loadBestArena() {
+  const raw = localStorage.getItem(BEST_ARENA_KEY);
+  const n = raw != null ? Number(raw) : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+function saveBestArena(n) {
+  localStorage.setItem(BEST_ARENA_KEY, String(Math.max(0, Math.floor(n))));
+}
 
 // web-game/src/map.ts
 function currentLocationIndex(app3) {
@@ -600,7 +609,7 @@ var RepDetector = class {
   }
 };
 
-// web-game/src/workout-screen.ts
+// web-game/src/battle-camera.ts
 var KEYPOINT_COUNT = 17;
 var MIN_SCORE = 0.3;
 var EDGES = [
@@ -619,60 +628,19 @@ var EDGES = [
   [KP.rightHip, KP.rightKnee],
   [KP.rightKnee, KP.rightAnkle]
 ];
-function startWorkout(app3, detector) {
-  const found = currentMonster(app3.progression);
-  if (!found) return;
-  const monster = found;
-  const video = document.getElementById("wk-video");
-  const canvas = document.getElementById("wk-overlay");
+async function startBattleCamera(video, canvas, detector, onRep3, onStatus) {
   const ctx = canvas.getContext("2d");
-  const counterEl = document.getElementById("wk-counter");
-  const setEl = document.getElementById("wk-set");
-  const hpEl = document.getElementById("wk-hp");
-  const restEl = document.getElementById("wk-rest");
-  const statusEl = document.getElementById("wk-status");
-  const backBtn = document.getElementById("wk-back");
-  const monsterImg = document.getElementById("wk-monster");
-  const monsterName = document.getElementById("wk-monster-name");
-  const hpTextEl = document.getElementById("wk-hp-text");
-  const timeEl = document.getElementById("wk-time");
-  monsterImg.src = `./games/${monster.cardImage}`;
-  monsterName.textContent = monster.name;
-  const maxHp = totalTarget(monster);
-  const hitSound = new Audio("./games/hit.mp3");
-  hitSound.volume = 0.6;
   const repDetector = new RepDetector(DEFAULT_CONFIG);
-  let wk = newWorkout(monster);
-  let resting = false;
-  let finished = false;
-  let stream = null;
-  const startMs = performance.now();
-  const fmtTime = (ms) => {
-    const s = Math.floor(ms / 1e3);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  };
-  const timerId = window.setInterval(() => {
-    timeEl.textContent = fmtTime(performance.now() - startMs);
-  }, 250);
-  const stopTimer = () => window.clearInterval(timerId);
-  backBtn.onclick = () => {
-    finished = true;
-    stopTimer();
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-    }
-    app3.persistProfile();
-    app3.render();
-    app3.show("screen-map");
-  };
-  const updateHud = () => {
-    counterEl.textContent = String(wk.repsInSet);
-    setEl.textContent = monster.sets > 1 ? `\u0421\u0435\u0442 ${wk.setIndex + 1}/${monster.sets} \xB7 \u0446\u0435\u043B\u044C ${monster.repsPerSet}` : `\u0426\u0435\u043B\u044C ${monster.repsPerSet}`;
-    const hp = Math.max(0, maxHp - wk.totalReps);
-    hpEl.style.width = `${hp / maxHp * 100}%`;
-    hpTextEl.textContent = `${hp} / ${maxHp} HP`;
-  };
-  updateHud();
+  let paused = false;
+  let stopped = false;
+  onStatus("\u0417\u0430\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E \u043A\u0430\u043C\u0435\u0440\u0443\u2026");
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: 640, height: 480 },
+    audio: false
+  });
+  video.srcObject = stream;
+  await video.play();
+  onStatus("\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430");
   function draw(pose) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -697,6 +665,118 @@ function startWorkout(app3, detector) {
       ctx.fill();
     }
   }
+  async function loop() {
+    if (stopped) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
+    let pose = null;
+    if (poses && poses[0]) {
+      const kps = poses[0].keypoints;
+      pose = [];
+      for (let i = 0; i < KEYPOINT_COUNT; i++) {
+        pose.push({ x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0 });
+      }
+      if (!paused) {
+        const events = repDetector.process(pose, performance.now());
+        for (const e of events) {
+          if (e === "repCounted") onRep3();
+        }
+      }
+    }
+    draw(pose);
+    requestAnimationFrame(loop);
+  }
+  loop();
+  return {
+    stop() {
+      stopped = true;
+      stream.getTracks().forEach((t) => t.stop());
+    },
+    setPaused(p) {
+      paused = p;
+    }
+  };
+}
+
+// web-game/src/workout-screen.ts
+function startWorkout(app3, detector) {
+  const found = currentMonster(app3.progression);
+  if (!found) return;
+  const monster = found;
+  const video = document.getElementById("wk-video");
+  const canvas = document.getElementById("wk-overlay");
+  const counterEl = document.getElementById("wk-counter");
+  const setEl = document.getElementById("wk-set");
+  const hpEl = document.getElementById("wk-hp");
+  const restEl = document.getElementById("wk-rest");
+  const statusEl = document.getElementById("wk-status");
+  const backBtn = document.getElementById("wk-back");
+  const monsterImg = document.getElementById("wk-monster");
+  const monsterName = document.getElementById("wk-monster-name");
+  const hpTextEl = document.getElementById("wk-hp-text");
+  const timeEl = document.getElementById("wk-time");
+  monsterImg.src = `./games/${monster.cardImage}`;
+  monsterName.textContent = monster.name;
+  const maxHp = totalTarget(monster);
+  const hitSound = new Audio("./games/hit.mp3");
+  hitSound.volume = 0.6;
+  let wk = newWorkout(monster);
+  let camera = null;
+  let aborted = false;
+  const startMs = performance.now();
+  const fmtTime = (ms) => {
+    const s = Math.floor(ms / 1e3);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  const timerId = window.setInterval(() => {
+    timeEl.textContent = fmtTime(performance.now() - startMs);
+  }, 250);
+  const stopTimer = () => window.clearInterval(timerId);
+  backBtn.onclick = () => {
+    aborted = true;
+    stopTimer();
+    if (camera) camera.stop();
+    restEl.style.display = "none";
+    app3.persistProfile();
+    app3.render();
+    app3.show("screen-map");
+  };
+  const updateHud = () => {
+    counterEl.textContent = String(wk.repsInSet);
+    setEl.textContent = monster.sets > 1 ? `\u0421\u0435\u0442 ${wk.setIndex + 1}/${monster.sets} \xB7 \u0446\u0435\u043B\u044C ${monster.repsPerSet}` : `\u0426\u0435\u043B\u044C ${monster.repsPerSet}`;
+    const hp = Math.max(0, maxHp - wk.totalReps);
+    hpEl.style.width = `${hp / maxHp * 100}%`;
+    hpTextEl.textContent = `${hp} / ${maxHp} HP`;
+  };
+  updateHud();
+  function startRest() {
+    let left = monster.restBetweenSetsSec;
+    if (left <= 0) {
+      if (camera) camera.setPaused(false);
+      return;
+    }
+    if (camera) camera.setPaused(true);
+    restEl.style.display = "flex";
+    restEl.textContent = `\u041E\u0442\u0434\u044B\u0445: ${left} \u0441 (\u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C)`;
+    restEl.onclick = () => {
+      restEl.style.display = "none";
+      if (camera) camera.setPaused(false);
+    };
+    const tick = () => {
+      if (restEl.style.display === "none") return;
+      if (left <= 0) {
+        restEl.style.display = "none";
+        if (camera) camera.setPaused(false);
+        return;
+      }
+      restEl.textContent = `\u041E\u0442\u0434\u044B\u0445: ${left} \u0441 (\u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C)`;
+      left -= 1;
+      setTimeout(tick, 1e3);
+    };
+    tick();
+  }
   function handleRep() {
     try {
       hitSound.currentTime = 0;
@@ -709,79 +789,25 @@ function startWorkout(app3, detector) {
     app3.addRep();
     updateHud();
     if (res.event === "monsterDefeated") {
-      finished = true;
       stopTimer();
+      if (camera) camera.stop();
       app3.onDefeated();
     } else if (res.event === "setComplete") {
       startRest();
     }
   }
-  function startRest() {
-    resting = true;
-    let left = monster.restBetweenSetsSec;
-    restEl.style.display = "flex";
-    const tick = () => {
-      if (left <= 0) {
-        restEl.style.display = "none";
-        resting = false;
-        updateHud();
-        return;
-      }
-      restEl.textContent = `\u041E\u0442\u0434\u044B\u0445: ${left} \u0441 (\u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C)`;
-      left -= 1;
-      setTimeout(tick, 1e3);
-    };
-    if (monster.restBetweenSetsSec <= 0) {
-      restEl.style.display = "none";
-      resting = false;
-    } else {
-      restEl.textContent = `\u041E\u0442\u0434\u044B\u0445: ${left} \u0441 (\u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C)`;
-      restEl.onclick = () => {
-        restEl.style.display = "none";
-        resting = false;
-      };
-      tick();
+  startBattleCamera(video, canvas, detector, handleRep, (text) => {
+    statusEl.textContent = text;
+  }).then(
+    (cam) => {
+      camera = cam;
+      if (aborted) cam.stop();
+    },
+    (err) => {
+      statusEl.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430: " + (err?.message ?? String(err));
+      console.error(err);
     }
-  }
-  async function run() {
-    statusEl.textContent = "\u0417\u0430\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E \u043A\u0430\u043C\u0435\u0440\u0443\u2026";
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: 640, height: 480 },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-    const det = detector;
-    statusEl.textContent = "\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430";
-    async function loop() {
-      if (finished) {
-        video.srcObject.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      const poses = await det.estimatePoses(video, { flipHorizontal: false });
-      let pose = null;
-      if (poses && poses[0]) {
-        const kps = poses[0].keypoints;
-        pose = [];
-        for (let i = 0; i < KEYPOINT_COUNT; i++) {
-          pose.push({ x: kps[i].x, y: kps[i].y, score: kps[i].score ?? 0 });
-        }
-        if (!resting) {
-          const events = repDetector.process(pose, performance.now());
-          for (const e of events) {
-            if (e === "repCounted") handleRep();
-          }
-        }
-      }
-      draw(pose);
-      requestAnimationFrame(loop);
-    }
-    loop();
-  }
-  run().catch((err) => {
-    statusEl.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430: " + (err?.message ?? String(err));
-    console.error(err);
-  });
+  );
 }
 
 // web-game/src/auth.ts
@@ -890,7 +916,8 @@ import {
   query,
   orderBy,
   limit,
-  getDocs
+  getDocs,
+  where
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 async function loadRemote(uid) {
   const snap = await getDoc(doc(db, "users", uid));
@@ -901,7 +928,8 @@ async function loadRemote(uid) {
       defeatedCount: typeof d.defeatedCount === "number" ? d.defeatedCount : 0,
       lastWorkoutDate: typeof d.lastWorkoutDate === "string" ? d.lastWorkoutDate : null
     },
-    totalReps: typeof d.totalReps === "number" ? d.totalReps : 0
+    totalReps: typeof d.totalReps === "number" ? d.totalReps : 0,
+    bestArena: typeof d.bestArena === "number" ? d.bestArena : 0
   };
 }
 async function saveRemote(uid, profile, nickname) {
@@ -912,6 +940,7 @@ async function saveRemote(uid, profile, nickname) {
       defeatedCount: profile.progression.defeatedCount,
       lastWorkoutDate: profile.progression.lastWorkoutDate,
       totalReps: profile.totalReps,
+      bestArena: profile.bestArena,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -932,6 +961,25 @@ async function loadLeaderboard(max) {
   });
   return rows;
 }
+async function loadArenaLeaderboard(max) {
+  const q = query(
+    collection(db, "users"),
+    where("bestArena", ">", 0),
+    orderBy("bestArena", "desc"),
+    limit(max)
+  );
+  const snap = await getDocs(q);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    const d = docSnap.data();
+    rows.push({
+      uid: docSnap.id,
+      nickname: typeof d.nickname === "string" && d.nickname ? d.nickname : "\u2014",
+      kills: typeof d.bestArena === "number" ? d.bestArena : 0
+    });
+  });
+  return rows;
+}
 
 // web-game/src/sync.ts
 function latestDate(a, b) {
@@ -948,7 +996,8 @@ function mergeProgress(a, b) {
 function mergeProfile(a, b) {
   return {
     progression: mergeProgress(a.progression, b.progression),
-    totalReps: Math.max(a.totalReps, b.totalReps)
+    totalReps: Math.max(a.totalReps, b.totalReps),
+    bestArena: Math.max(a.bestArena, b.bestArena)
   };
 }
 
@@ -1011,16 +1060,24 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
-function rowHtml(row, rank, isMe) {
+function xpRowHtml(row, rank, isMe) {
   const loc = locationLabel(row.defeatedCount);
   const locText = loc.index != null ? `\u041B\u043E\u043A\u0430\u0446\u0438\u044F ${loc.index} \xB7 ${esc(loc.name)}` : esc(loc.name);
   return `<div class="arena-row${isMe ? " me" : ""}"><div class="rank">${rank}</div><div class="who"><b>${esc(row.nickname)}</b><span>${locText}</span></div><div class="xp">${row.totalReps} XP</div></div>`;
 }
-async function renderLeaderboard(list, currentUid) {
+function arenaRowHtml(row, rank, isMe) {
+  return `<div class="arena-row${isMe ? " me" : ""}"><div class="rank">${rank}</div><div class="who"><b>${esc(row.nickname)}</b></div><div class="xp">${row.kills} \u{1F480}</div></div>`;
+}
+async function openModal(title, currentUid, load, sort, rowHtml) {
+  const modal = document.getElementById("arena-modal");
+  const list = document.getElementById("arena-modal-list");
+  const h1 = document.querySelector("#arena-modal-panel h1");
+  h1.textContent = title;
+  modal.hidden = false;
   list.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026";
   try {
-    const rows = await loadLeaderboard(50);
-    rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps);
+    const rows = await load();
+    sort(rows);
     if (rows.length === 0) {
       list.innerHTML = '<div id="arena-empty">\u041F\u043E\u043A\u0430 \u043D\u0438\u043A\u0442\u043E \u043D\u0435 \u0438\u0433\u0440\u0430\u043B</div>';
       return;
@@ -1030,17 +1087,107 @@ async function renderLeaderboard(list, currentUid) {
     list.innerHTML = '<div id="arena-empty">\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0435\u0439\u0442\u0438\u043D\u0433</div>';
   }
 }
-async function openArena(currentUid) {
-  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-  document.getElementById("screen-arena").classList.add("active");
-  await renderLeaderboard(document.getElementById("arena-list"), currentUid);
+function openXpRatingModal(currentUid) {
+  return openModal(
+    "\u0420\u0435\u0439\u0442\u0438\u043D\u0433",
+    currentUid,
+    () => loadLeaderboard(50),
+    (rows) => rows.sort((a, b) => b.defeatedCount - a.defeatedCount || b.totalReps - a.totalReps),
+    xpRowHtml
+  );
 }
-async function openArenaModal(currentUid) {
-  document.getElementById("arena-modal").hidden = false;
-  await renderLeaderboard(document.getElementById("arena-modal-list"), currentUid);
+function openArenaRatingModal(currentUid) {
+  return openModal(
+    "\u0420\u0435\u0439\u0442\u0438\u043D\u0433 \u0430\u0440\u0435\u043D\u044B",
+    currentUid,
+    () => loadArenaLeaderboard(50),
+    (rows) => rows.sort((a, b) => b.kills - a.kills),
+    arenaRowHtml
+  );
 }
 function closeArenaModal() {
   document.getElementById("arena-modal").hidden = true;
+}
+
+// app/src/game/arena.ts
+var ARENA_CONFIG = {
+  baseHp: 5,
+  hpStep: 2,
+  secondsPerRep: 4,
+  baseTimerSec: 60,
+  restSec: 30
+};
+function mobHp(n, cfg = ARENA_CONFIG) {
+  return cfg.baseHp + cfg.hpStep * (n - 1);
+}
+function mobTimerSec(n, cfg = ARENA_CONFIG) {
+  return Math.max(cfg.baseTimerSec, mobHp(n, cfg) * cfg.secondsPerRep);
+}
+function arenaMonster(n) {
+  return MONSTER_SEQUENCE[(n - 1) % MONSTER_SEQUENCE.length];
+}
+function newRun(cfg = ARENA_CONFIG) {
+  return { mobIndex: 1, hpLeft: mobHp(1, cfg), kills: 0, phase: "fighting" };
+}
+function onRep2(s, _cfg = ARENA_CONFIG) {
+  if (s.phase !== "fighting") return { state: s, event: "noop" };
+  const hpLeft = s.hpLeft - 1;
+  if (hpLeft <= 0) {
+    return {
+      state: { ...s, hpLeft: 0, kills: s.kills + 1, phase: "resting" },
+      event: "mobKilled"
+    };
+  }
+  return { state: { ...s, hpLeft }, event: "hit" };
+}
+function onRestDone(s, cfg = ARENA_CONFIG) {
+  if (s.phase !== "resting") return s;
+  const mobIndex = s.mobIndex + 1;
+  return { ...s, mobIndex, hpLeft: mobHp(mobIndex, cfg), phase: "fighting" };
+}
+function onTimeout(s) {
+  if (s.phase !== "fighting") return s;
+  return { ...s, phase: "over" };
+}
+
+// web-game/src/arena-lobby.ts
+function openArenaLobby(app3) {
+  const best = document.getElementById("arena-best");
+  if (app3.bestArena > 0) {
+    best.textContent = `\u041B\u0443\u0447\u0448\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442: ${app3.bestArena}`;
+    best.style.display = "";
+  } else {
+    best.style.display = "none";
+  }
+  app3.show("screen-arena-lobby");
+}
+function showArenaPreview(app3) {
+  const m = arenaMonster(1);
+  const img = document.getElementById("card-img");
+  const target = document.getElementById("card-target");
+  const hp = document.getElementById("card-hp");
+  const startBtn = document.getElementById("card-start-btn");
+  const backBtn = document.getElementById("card-back-btn");
+  const startSpan = startBtn.querySelector("span");
+  const hint = document.getElementById("hint");
+  img.src = `./games/${m.cardImage}`;
+  hp.style.width = "100%";
+  target.textContent = `\u0410\u0420\u0415\u041D\u0410 \xB7 ${m.name}: ${mobHp(1)} HP \xB7 ${mobTimerSec(1)} \u0441\u0435\u043A`;
+  startSpan.textContent = "\u0412 \u0431\u043E\u0439";
+  startBtn.style.display = "";
+  hint.textContent = "";
+  startBtn.onclick = () => app3.goArenaBattle();
+  backBtn.onclick = () => openArenaLobby(app3);
+  app3.show("screen-card");
+}
+function initArenaLobby(app3) {
+  document.getElementById("arena-lobby-back").addEventListener("click", () => app3.show("screen-start"));
+  document.getElementById("arena-lobby-rating").addEventListener("click", () => {
+    void openArenaRatingModal(app3.currentUid());
+  });
+  document.getElementById("arena-lobby-start").addEventListener("click", () => showArenaPreview(app3));
+  document.getElementById("arena-result-lobby").addEventListener("click", () => openArenaLobby(app3));
+  document.getElementById("arena-result-again").addEventListener("click", () => showArenaPreview(app3));
 }
 
 // web-game/src/pose-model.ts
@@ -1059,6 +1206,150 @@ function ensureDetector() {
     });
   }
   return detectorPromise;
+}
+
+// web-game/src/arena-battle.ts
+function startArenaFlow(app3) {
+  app3.show("screen-loading");
+  const loadingBack = document.getElementById("loading-back");
+  const loadingText = document.getElementById("loading-text");
+  loadingBack.style.display = "none";
+  loadingText.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0430\u0440\u0435\u043D\u044B\u2026";
+  ensureDetector().then(
+    (detector) => {
+      if (!document.getElementById("screen-loading").classList.contains("active")) return;
+      app3.show("screen-workout");
+      runArena(app3, detector);
+    },
+    () => {
+      loadingText.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u043E\u0434\u0435\u043B\u044C";
+      loadingBack.style.display = "inline-block";
+    }
+  );
+}
+function runArena(app3, detector) {
+  const video = document.getElementById("wk-video");
+  const canvas = document.getElementById("wk-overlay");
+  const counterEl = document.getElementById("wk-counter");
+  const setEl = document.getElementById("wk-set");
+  const hpEl = document.getElementById("wk-hp");
+  const restEl = document.getElementById("wk-rest");
+  const statusEl = document.getElementById("wk-status");
+  const backBtn = document.getElementById("wk-back");
+  const monsterImg = document.getElementById("wk-monster");
+  const monsterName = document.getElementById("wk-monster-name");
+  const hpTextEl = document.getElementById("wk-hp-text");
+  const timeEl = document.getElementById("wk-time");
+  const hitSound = new Audio("./games/hit.mp3");
+  hitSound.volume = 0.6;
+  let state = newRun();
+  let camera = null;
+  let secLeft = mobTimerSec(state.mobIndex);
+  let mobTimerId = 0;
+  let ended = false;
+  const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  function renderMobHud() {
+    const m = arenaMonster(state.mobIndex);
+    monsterImg.src = `./games/${m.cardImage}`;
+    monsterName.textContent = m.name;
+    const maxHp = mobHp(state.mobIndex);
+    hpEl.style.width = `${state.hpLeft / maxHp * 100}%`;
+    hpTextEl.textContent = `${state.hpLeft} / ${maxHp} HP`;
+    counterEl.textContent = String(maxHp - state.hpLeft);
+    setEl.textContent = `\u0423\u0431\u0438\u0442\u043E: ${state.kills}`;
+  }
+  function renderTimer() {
+    timeEl.textContent = fmtTime(Math.max(0, secLeft));
+    timeEl.style.color = secLeft <= 10 ? "#ff6a56" : "#fff";
+  }
+  function startMobTimer() {
+    secLeft = mobTimerSec(state.mobIndex);
+    renderTimer();
+    window.clearInterval(mobTimerId);
+    mobTimerId = window.setInterval(() => {
+      secLeft -= 1;
+      renderTimer();
+      if (secLeft <= 0) {
+        window.clearInterval(mobTimerId);
+        state = onTimeout(state);
+        endRun();
+      }
+    }, 1e3);
+  }
+  function startRest() {
+    if (camera) camera.setPaused(true);
+    window.clearInterval(mobTimerId);
+    let left = ARENA_CONFIG.restSec;
+    restEl.style.display = "flex";
+    const finishRest = () => {
+      restEl.style.display = "none";
+      state = onRestDone(state);
+      renderMobHud();
+      if (camera) camera.setPaused(false);
+      startMobTimer();
+    };
+    restEl.onclick = finishRest;
+    const tick = () => {
+      if (restEl.style.display === "none") return;
+      if (left <= 0) {
+        finishRest();
+        return;
+      }
+      restEl.textContent = `\u041E\u0442\u0434\u044B\u0445: ${left} \u0441 (\u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C)`;
+      left -= 1;
+      setTimeout(tick, 1e3);
+    };
+    tick();
+  }
+  function handleRep() {
+    if (ended || state.phase !== "fighting") return;
+    try {
+      hitSound.currentTime = 0;
+      hitSound.play().catch(() => {
+      });
+    } catch {
+    }
+    const res = onRep2(state);
+    state = res.state;
+    app3.addRep();
+    renderMobHud();
+    if (res.event === "mobKilled") {
+      startRest();
+    }
+  }
+  function endRun() {
+    if (ended) return;
+    ended = true;
+    window.clearInterval(mobTimerId);
+    restEl.style.display = "none";
+    timeEl.style.color = "#fff";
+    if (camera) camera.stop();
+    const kills = state.kills;
+    const isRecord = kills > app3.bestArena;
+    if (isRecord) {
+      app3.bestArena = kills;
+      saveBestArena(kills);
+    }
+    app3.persistProfile();
+    document.getElementById("arena-result-kills").textContent = `\u0423\u0431\u0438\u0442\u043E \u043C\u043E\u0431\u043E\u0432: ${kills}`;
+    document.getElementById("arena-result-record").textContent = isRecord ? "\u041D\u043E\u0432\u044B\u0439 \u0440\u0435\u043A\u043E\u0440\u0434!" : `\u0420\u0435\u043A\u043E\u0440\u0434: ${app3.bestArena}`;
+    app3.show("screen-arena-result");
+  }
+  backBtn.onclick = () => endRun();
+  renderMobHud();
+  startMobTimer();
+  startBattleCamera(video, canvas, detector, handleRep, (text) => {
+    statusEl.textContent = text;
+  }).then(
+    (cam) => {
+      camera = cam;
+      if (ended) cam.stop();
+    },
+    (err) => {
+      statusEl.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430: " + (err?.message ?? String(err));
+      console.error(err);
+    }
+  );
 }
 
 // web-game/src/main.ts
@@ -1098,13 +1389,23 @@ function showSyncWarning() {
 var app2 = {
   progression: loadProgression(),
   totalReps: loadTotalReps(),
+  bestArena: loadBestArena(),
   show,
   render() {
     renderMap(this);
   },
   goCard() {
     renderCard(this);
-    show("screen-card");
+    const startBtn = document.getElementById("card-start-btn");
+    const backBtn = document.getElementById("card-back-btn");
+    const startSpan = startBtn.querySelector("span");
+    startSpan.textContent = "\u041D\u0430\u0447\u0430\u0442\u044C \u0442\u0440\u0435\u043D\u0438\u0440\u043E\u0432\u043A\u0443";
+    startBtn.onclick = () => this.goWorkout();
+    backBtn.onclick = () => {
+      this.render();
+      this.show("screen-map");
+    };
+    this.show("screen-card");
   },
   goWorkout() {
     show("screen-loading");
@@ -1130,8 +1431,18 @@ var app2 = {
   },
   persistProfile() {
     if (!currentUser) return;
-    const profile = { progression: this.progression, totalReps: this.totalReps };
+    const profile = {
+      progression: this.progression,
+      totalReps: this.totalReps,
+      bestArena: this.bestArena
+    };
     saveRemote(currentUser.uid, profile, currentUser.nickname).catch(showSyncWarning);
+  },
+  currentUid() {
+    return currentUser ? currentUser.uid : null;
+  },
+  goArenaBattle() {
+    startArenaFlow(this);
   },
   onDefeated() {
     const m = currentMonster(this.progression);
@@ -1149,11 +1460,9 @@ document.getElementById("btn-campaign").addEventListener("click", () => {
   app2.render();
   show("screen-map");
 });
-document.getElementById("btn-arena").addEventListener("click", () => {
-  void openArena(currentUser ? currentUser.uid : null);
-});
-document.getElementById("arena-back").addEventListener("click", () => show("screen-start"));
+document.getElementById("btn-arena").addEventListener("click", () => openArenaLobby(app2));
 document.getElementById("loading-back").addEventListener("click", () => show("screen-start"));
+initArenaLobby(app2);
 var menuVids = [
   document.getElementById("menu-bg-video"),
   document.getElementById("menu-bg-video-b")
@@ -1198,14 +1507,9 @@ document.getElementById("victory-map").addEventListener("click", () => {
   app2.render();
   show("screen-map");
 });
-document.getElementById("card-back-btn").addEventListener("click", () => {
-  app2.render();
-  show("screen-map");
-});
-document.getElementById("card-start-btn").addEventListener("click", () => app2.goWorkout());
 document.getElementById("map-back").addEventListener("click", () => show("screen-start"));
 document.getElementById("map-rating").addEventListener("click", () => {
-  void openArenaModal(currentUser ? currentUser.uid : null);
+  void openXpRatingModal(currentUser ? currentUser.uid : null);
 });
 var arenaModal = document.getElementById("arena-modal");
 document.getElementById("arena-modal-close").addEventListener("click", closeArenaModal);
@@ -1227,7 +1531,11 @@ onUser(async (user) => {
     show("screen-auth");
     return;
   }
-  const local = { progression: loadProgression(), totalReps: loadTotalReps() };
+  const local = {
+    progression: loadProgression(),
+    totalReps: loadTotalReps(),
+    bestArena: loadBestArena()
+  };
   let remote = null;
   try {
     remote = await loadRemote(user.uid);
@@ -1237,8 +1545,10 @@ onUser(async (user) => {
   const merged = remote ? mergeProfile(local, remote) : local;
   app2.progression = merged.progression;
   app2.totalReps = merged.totalReps;
+  app2.bestArena = merged.bestArena;
   saveProgression(merged.progression);
   saveTotalReps(merged.totalReps);
+  saveBestArena(merged.bestArena);
   saveRemote(user.uid, merged, user.nickname).catch(showSyncWarning);
   showAccountChip(user.nickname);
   show("screen-start");

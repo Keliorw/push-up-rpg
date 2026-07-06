@@ -41,3 +41,15 @@ export function loadTotalReps(): number {
 export function saveTotalReps(n: number): void {
   localStorage.setItem(XP_KEY, String(Math.max(0, Math.floor(n))));
 }
+
+const BEST_ARENA_KEY = 'pushuprpg.bestArena';
+
+export function loadBestArena(): number {
+  const raw = localStorage.getItem(BEST_ARENA_KEY);
+  const n = raw != null ? Number(raw) : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
+export function saveBestArena(n: number): void {
+  localStorage.setItem(BEST_ARENA_KEY, String(Math.max(0, Math.floor(n))));
+}
