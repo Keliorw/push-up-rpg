@@ -17,6 +17,7 @@ import {openXpRatingModal, closeArenaModal} from './arena-screen';
 import {loadBestArena, saveBestArena} from './storage';
 import {openArenaLobby, showArenaPreview, initArenaLobby} from './arena-lobby';
 import {ensureDetector} from './pose-model';
+import {startArenaFlow} from './arena-battle';
 
 export type ScreenId =
   | 'screen-auth'
@@ -142,7 +143,7 @@ const app: App = {
     return currentUser ? currentUser.uid : null;
   },
   goArenaBattle() {
-    // реализуется в Task 7 (arena-battle)
+    startArenaFlow(this);
   },
   onDefeated() {
     const m = currentMonster(this.progression);
