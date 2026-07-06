@@ -13,7 +13,7 @@ import {loadRemote, saveRemote} from './remote-storage';
 import {mergeProfile, Profile} from './sync';
 import {loadTotalReps, saveTotalReps} from './storage';
 import {initAuthScreen, revealAuthForm} from './auth-screen';
-import {openArena} from './arena-screen';
+import {openArena, openArenaModal, closeArenaModal} from './arena-screen';
 import {ensureDetector} from './pose-model';
 
 export type ScreenId =
@@ -207,6 +207,19 @@ document.getElementById('card-back-btn')!.addEventListener('click', () => {
 document.getElementById('card-start-btn')!.addEventListener('click', () => app.goWorkout());
 // MAP: возврат в главное меню
 document.getElementById('map-back')!.addEventListener('click', () => show('screen-start'));
+
+// MAP: рейтинг модалкой (правый верхний угол). Закрытие — крестик / фон / Esc.
+document.getElementById('map-rating')!.addEventListener('click', () => {
+  void openArenaModal(currentUser ? currentUser.uid : null);
+});
+const arenaModal = document.getElementById('arena-modal')!;
+document.getElementById('arena-modal-close')!.addEventListener('click', closeArenaModal);
+arenaModal.addEventListener('click', e => {
+  if (e.target === arenaModal) closeArenaModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !(arenaModal as HTMLElement).hidden) closeArenaModal();
+});
 
 // LOGOUT
 document.getElementById('btn-logout')!.addEventListener('click', () => {

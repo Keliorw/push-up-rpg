@@ -50,6 +50,13 @@
         filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
       #map-back img { width: 100%; height: 100%; display: block; }
       #map-back:active { transform: scale(.93); }
+      /* Кнопка рейтинга — правый верхний угол карты (зеркально #map-back) */
+      #map-rating { position: absolute; top: 10px; right: 10px; z-index: 5;
+        width: 56px; height: 56px; padding: 0; border: none; background: none;
+        cursor: pointer; transition: transform .1s ease;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+      #map-rating img { width: 100%; height: 100%; display: block; }
+      #map-rating:active { transform: scale(.93); }
       .node {
         position: absolute; width: 34px; height: 34px; transform: translate(-50%, -50%);
         border-radius: 50%; border: 3px solid #fff; display: flex;
@@ -189,6 +196,17 @@
       .arena-row .xp { color: #F5A623; font-weight: 800; white-space: nowrap; }
       .arena-row.me { background: rgba(245,166,35,.14); border-radius: 8px; }
       #arena-empty { color: #9aa4b2; text-align: center; padding: 24px; }
+      /* ARENA MODAL (рейтинг поверх карты) */
+      #arena-modal { position: fixed; inset: 0; z-index: 30; padding: 16px;
+        display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); }
+      #arena-modal[hidden] { display: none; }
+      #arena-modal-panel { position: relative; width: 100%; max-width: 480px;
+        max-height: 85vh; overflow-y: auto; background: #101828;
+        border: 1px solid #3a4a67; border-radius: 16px; padding: 20px 16px 16px; }
+      #arena-modal-panel h1 { color: #F5A623; text-align: center; font-size: 26px; margin: 0 0 16px; }
+      #arena-modal-close { position: absolute; top: 10px; right: 10px;
+        width: 36px; height: 36px; border-radius: 50%; background: rgba(11,17,31,.85);
+        border: 1px solid #3a4a67; color: #fff; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
       /* LOADING */
       #screen-loading { min-height: 100vh; display: none; }
       #screen-loading.active { display: flex; align-items: center; justify-content: center; }
@@ -254,6 +272,9 @@
           <button id="map-back" aria-label="В меню">
             <img src="./games/back-in-map.png" alt="" />
           </button>
+          <button id="map-rating" aria-label="Рейтинг">
+            <img src="./games/rating.png" alt="" />
+          </button>
           <!-- node markers injected by JS -->
         </div>
       </section>
@@ -308,6 +329,14 @@
           <button class="btn" id="victory-map">На карту</button>
         </div>
       </section>
+
+      <div id="arena-modal" hidden>
+        <div id="arena-modal-panel">
+          <button id="arena-modal-close" aria-label="Закрыть">✕</button>
+          <h1>Рейтинг</h1>
+          <div id="arena-modal-list">Загрузка…</div>
+        </div>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
