@@ -1,5 +1,8 @@
+import {Exercise} from '../../app/src/game/exercise';
 import {DEFAULT_CONFIG} from '../../app/src/pose/config';
 import {RepDetector} from '../../app/src/pose/RepDetector';
+import {DEFAULT_SQUAT_CONFIG} from '../../app/src/pose/squat-config';
+import {SquatDetector} from '../../app/src/pose/SquatDetector';
 import {KP, Pose} from '../../app/src/pose/types';
 
 const KEYPOINT_COUNT = 17;
@@ -31,17 +34,23 @@ export interface BattleCamera {
 /**
  * Запускает фронтальную камеру + распознавание поз MoveNet. На каждый
  * засчитанный повтор (когда не на паузе) зовёт onRep(); рисует скелет на canvas.
- * onStatus сообщает текстовые статусы (камера / упор лёжа / ошибка).
+ * onStatus сообщает текстовые статусы (камера / исходное положение / ошибка).
+ * exercise выбирает детектор: отжимания (RepDetector) или приседания
+ * (SquatDetector) — контракт process() у них одинаковый.
  */
 export async function startBattleCamera(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
   detector: any,
+  exercise: Exercise,
   onRep: () => void,
   onStatus: (text: string) => void,
 ): Promise<BattleCamera> {
   const ctx = canvas.getContext('2d')!;
-  const repDetector = new RepDetector(DEFAULT_CONFIG);
+  const repDetector =
+    exercise === 'squats'
+      ? new SquatDetector(DEFAULT_SQUAT_CONFIG)
+      : new RepDetector(DEFAULT_CONFIG);
   let paused = false;
   let stopped = false;
 
@@ -52,7 +61,7 @@ export async function startBattleCamera(
   });
   video.srcObject = stream;
   await video.play();
-  onStatus('Займи упор лёжа');
+  onStatus(exercise === 'squats' ? 'Встань в полный рост' : 'Займи упор лёжа');
 
   function draw(pose: Pose | null) {
     canvas.width = video.videoWidth;

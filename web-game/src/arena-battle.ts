@@ -160,7 +160,8 @@ function runArena(app: App, detector: any): void {
 
   renderMobHud();
   startMobTimer();
-  startBattleCamera(video, canvas, detector, handleRep, text => {
+  // Арена — всегда отжимания (режим приседаний пока только в кампании).
+  startBattleCamera(video, canvas, detector, 'pushups', handleRep, text => {
     statusEl.textContent = text;
   }).then(
     cam => {

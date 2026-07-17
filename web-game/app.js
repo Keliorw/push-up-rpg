@@ -232,6 +232,15 @@ function renderMap(app3) {
   }
 }
 
+// app/src/game/exercise.ts
+var SQUAT_TARGET_MULT = 1.5;
+function monsterForExercise(m, exercise) {
+  if (exercise === "pushups") {
+    return m;
+  }
+  return { ...m, repsPerSet: Math.ceil(m.repsPerSet * SQUAT_TARGET_MULT) };
+}
+
 // app/src/game/workout.ts
 function newWorkout(_m) {
   return { setIndex: 0, repsInSet: 0, totalReps: 0, done: false };
@@ -262,24 +271,48 @@ function onRep(state, m) {
 }
 
 // web-game/src/card.ts
+var EXERCISE_WORD = {
+  pushups: "\u043E\u0442\u0436\u0438\u043C\u0430\u043D\u0438\u0439",
+  squats: "\u043F\u0440\u0438\u0441\u0435\u0434\u0430\u043D\u0438\u0439"
+};
 function renderCard(app3) {
   const m = currentMonster(app3.progression);
   const img = document.getElementById("card-img");
   const target = document.getElementById("card-target");
   const hp = document.getElementById("card-hp");
   const startBtn = document.getElementById("card-start-btn");
+  const modeWrap = document.getElementById("card-mode");
+  const modePushups = document.getElementById("mode-pushups");
+  const modeSquats = document.getElementById("mode-squats");
   const hint = document.getElementById("hint");
   if (!m) {
     target.textContent = "\u0412\u0441\u0435 \u0432\u0440\u0430\u0433\u0438 \u043F\u043E\u0432\u0435\u0440\u0436\u0435\u043D\u044B!";
     startBtn.style.display = "none";
+    modeWrap.style.display = "none";
     hint.textContent = "";
     img.removeAttribute("src");
     return;
   }
+  const updateTarget = () => {
+    const scaled = monsterForExercise(m, app3.exercise);
+    const word = EXERCISE_WORD[app3.exercise];
+    target.textContent = scaled.kind === "boss" ? `\u0411\u041E\u0421\u0421: ${scaled.sets} \u043F\u043E\u0434\u0445\u043E\u0434\u0430 \xD7 ${scaled.repsPerSet} ${word} (\u0432\u0441\u0435\u0433\u043E ${totalTarget(scaled)})` : `\u041F\u043E\u0431\u0435\u0434\u0438: ${scaled.repsPerSet} ${word}`;
+    modePushups.classList.toggle("active", app3.exercise === "pushups");
+    modeSquats.classList.toggle("active", app3.exercise === "squats");
+  };
+  modePushups.onclick = () => {
+    app3.exercise = "pushups";
+    updateTarget();
+  };
+  modeSquats.onclick = () => {
+    app3.exercise = "squats";
+    updateTarget();
+  };
   img.src = `./games/${m.cardImage}`;
   hp.style.width = "100%";
-  target.textContent = m.kind === "boss" ? `\u0411\u041E\u0421\u0421: ${m.sets} \u043F\u043E\u0434\u0445\u043E\u0434\u0430 \xD7 ${m.repsPerSet} (\u0432\u0441\u0435\u0433\u043E ${totalTarget(m)})` : `\u041F\u043E\u0431\u0435\u0434\u0438: ${m.repsPerSet} \u043E\u0442\u0436\u0438\u043C\u0430\u043D\u0438\u0439`;
+  updateTarget();
   startBtn.style.display = "";
+  modeWrap.style.display = "";
   hint.textContent = "";
 }
 
@@ -609,6 +642,255 @@ var RepDetector = class {
   }
 };
 
+// app/src/pose/squat-config.ts
+var DEFAULT_SQUAT_CONFIG = {
+  minKeypointScore: 0.4,
+  positionHoldMs: 400,
+  gateLostGraceMs: 700,
+  minRepDurationMs: 700,
+  torsoUprightMinFrac: 0.5,
+  gapGateMinFrac: -0.5,
+  // Калибровка по видео 2026-07-17: настоящие приседания в нижней точке дают
+  // зазор −0.18…0.32, шаги/переминания — ≥0.48. Порог 0.4 разделяет с запасом.
+  gapDownFrac: 0.4,
+  gapUpFrac: 0.65,
+  gapSmoothing: 0.5,
+  maxPlausibleGap: 3,
+  maxKneeSplitFrac: 0.65,
+  kneeAngleSmoothing: 0.4,
+  descentSmoothing: 0.5,
+  baselineRelaxAlpha: 0.01,
+  maxPlausibleDescent: 2
+};
+
+// app/src/pose/SquatDetector.ts
+var LEGS = [
+  { hip: KP.leftHip, knee: KP.leftKnee, ankle: KP.leftAnkle },
+  { hip: KP.rightHip, knee: KP.rightKnee, ankle: KP.rightAnkle }
+];
+var SquatDetector = class {
+  constructor(cfg = DEFAULT_SQUAT_CONFIG) {
+    this.cfg = cfg;
+  }
+  cfg;
+  state = "noPosition";
+  holdStartMs = 0;
+  lastRepMs = Number.NEGATIVE_INFINITY;
+  lastGoodMs = Number.NEGATIVE_INFINITY;
+  smoothedGap = null;
+  smoothedKnee = null;
+  smoothedSplit = null;
+  // Счётчики валидных кадров фазы «вниз»: разброс колен выше/не выше порога.
+  // По большинству на выходе из «вниз» повтор либо присед, либо выпад.
+  downSplitHigh = 0;
+  downSplitLow = 0;
+  smoothedDescent = 0;
+  baselineTopY = null;
+  debug = {
+    inPosition: false,
+    gap: null,
+    torsoUprightFrac: null,
+    kneeAngle: null,
+    kneeSplit: null,
+    hipDescent: null,
+    phase: "up",
+    visibleKeypoints: 0,
+    bodyAspect: null
+  };
+  process(pose, tMs) {
+    this.debug.visibleKeypoints = this.countVisible(pose);
+    this.debug.bodyAspect = this.bodyAspect(pose);
+    const shoulder = this.mid(pose, KP.leftShoulder, KP.rightShoulder);
+    const hip = this.mid(pose, KP.leftHip, KP.rightHip);
+    const knee = this.mid(pose, KP.leftKnee, KP.rightKnee);
+    const torsoLen = shoulder && hip ? Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y) : 0;
+    const upright = shoulder && hip && torsoLen > 1e-6 ? (hip.y - shoulder.y) / torsoLen : null;
+    this.debug.torsoUprightFrac = upright;
+    const rawGap = hip && knee && torsoLen > 1e-6 ? (knee.y - hip.y) / torsoLen : null;
+    const inGate = upright !== null && rawGap !== null && Math.abs(rawGap) <= this.cfg.maxPlausibleGap && upright >= this.cfg.torsoUprightMinFrac && rawGap >= this.cfg.gapGateMinFrac;
+    if (!inGate) {
+      if (this.state !== "noPosition" && tMs - this.lastGoodMs <= this.cfg.gateLostGraceMs) {
+        return [];
+      }
+      return this.dropPosition();
+    }
+    this.lastGoodMs = tMs;
+    const gap = this.updateGap(rawGap);
+    this.debug.gap = gap;
+    this.debug.kneeAngle = this.updateKnee(pose);
+    const split = this.updateSplit(pose, torsoLen);
+    this.debug.kneeSplit = split;
+    this.debug.hipDescent = this.updateDescent(hip, torsoLen);
+    switch (this.state) {
+      case "noPosition":
+        this.state = "holding";
+        this.holdStartMs = tMs;
+        this.debug.inPosition = false;
+        return [];
+      case "holding":
+        if (tMs - this.holdStartMs >= this.cfg.positionHoldMs) {
+          this.state = "up";
+          this.debug.inPosition = true;
+          this.debug.phase = "up";
+          return ["positionAcquired"];
+        }
+        return [];
+      case "up":
+        if (gap <= this.cfg.gapDownFrac) {
+          this.state = "down";
+          this.debug.phase = "down";
+          this.downSplitHigh = 0;
+          this.downSplitLow = 0;
+        }
+        return [];
+      case "down":
+        if (split !== null) {
+          if (split > this.cfg.maxKneeSplitFrac) {
+            this.downSplitHigh++;
+          } else {
+            this.downSplitLow++;
+          }
+        }
+        if (gap >= this.cfg.gapUpFrac) {
+          this.state = "up";
+          this.debug.phase = "up";
+          const isLunge = this.downSplitHigh > this.downSplitLow;
+          if (!isLunge && tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
+            this.lastRepMs = tMs;
+            return ["repCounted"];
+          }
+        }
+        return [];
+    }
+  }
+  updateGap(raw) {
+    this.smoothedGap = this.smoothedGap === null ? raw : this.cfg.gapSmoothing * raw + (1 - this.cfg.gapSmoothing) * this.smoothedGap;
+    return this.smoothedGap;
+  }
+  /** Сглаженный разброс колен по высоте; null если видно меньше двух колен. */
+  updateSplit(pose, torsoLen) {
+    const l = this.vis(pose, KP.leftKnee);
+    const r = this.vis(pose, KP.rightKnee);
+    if (!l || !r || torsoLen < 1e-6) {
+      this.smoothedSplit = null;
+      return null;
+    }
+    const raw = Math.abs(l.y - r.y) / torsoLen;
+    this.smoothedSplit = this.smoothedSplit === null ? raw : this.cfg.gapSmoothing * raw + (1 - this.cfg.gapSmoothing) * this.smoothedSplit;
+    return this.smoothedSplit;
+  }
+  /** Сглаженный средний угол колена по ногам с видимой лодыжкой. */
+  updateKnee(pose) {
+    const angles = [];
+    for (const leg of LEGS) {
+      const h = this.vis(pose, leg.hip);
+      const k = this.vis(pose, leg.knee);
+      const a = this.vis(pose, leg.ankle);
+      if (h && k && a) {
+        angles.push(angleDeg(h, k, a));
+      }
+    }
+    if (angles.length === 0) {
+      this.smoothedKnee = null;
+      return null;
+    }
+    const raw = angles.reduce((sum, v) => sum + v, 0) / angles.length;
+    this.smoothedKnee = this.smoothedKnee === null ? raw : this.cfg.kneeAngleSmoothing * raw + (1 - this.cfg.kneeAngleSmoothing) * this.smoothedKnee;
+    return this.smoothedKnee;
+  }
+  /** Просадка таза от «верхней» базовой линии, в долях торса (вторичный). */
+  updateDescent(hip, torsoLen) {
+    if (torsoLen < 1e-6) {
+      return null;
+    }
+    const y = hip.y;
+    if (this.baselineTopY === null || y < this.baselineTopY) {
+      this.baselineTopY = y;
+    } else {
+      this.baselineTopY += (y - this.baselineTopY) * this.cfg.baselineRelaxAlpha;
+    }
+    const raw = Math.max(0, (y - this.baselineTopY) / torsoLen);
+    if (raw > this.cfg.maxPlausibleDescent) {
+      return null;
+    }
+    this.smoothedDescent = this.cfg.descentSmoothing * raw + (1 - this.cfg.descentSmoothing) * this.smoothedDescent;
+    return this.smoothedDescent;
+  }
+  bodyAspect(pose) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      const p = pose[i];
+      if (!p || p.score < this.cfg.minKeypointScore) {
+        continue;
+      }
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+      n++;
+    }
+    if (n < 4) {
+      return null;
+    }
+    const w = maxX - minX;
+    if (w < 1e-6) {
+      return null;
+    }
+    return (maxY - minY) / w;
+  }
+  countVisible(pose) {
+    let n = 0;
+    for (let i = 0; i < pose.length; i++) {
+      if (pose[i] && pose[i].score >= this.cfg.minKeypointScore) {
+        n++;
+      }
+    }
+    return n;
+  }
+  dropPosition() {
+    const wasAcquired = this.state === "up" || this.state === "down";
+    this.state = "noPosition";
+    this.smoothedGap = null;
+    this.smoothedKnee = null;
+    this.smoothedSplit = null;
+    this.smoothedDescent = 0;
+    this.baselineTopY = null;
+    this.debug.inPosition = false;
+    this.debug.phase = "up";
+    this.debug.gap = null;
+    this.debug.kneeAngle = null;
+    this.debug.kneeSplit = null;
+    this.debug.hipDescent = null;
+    return wasAcquired ? ["positionLost"] : [];
+  }
+  vis(pose, idx) {
+    const p = pose[idx];
+    if (!p || p.score < this.cfg.minKeypointScore) {
+      return null;
+    }
+    return p;
+  }
+  /** Среднее видимых точек из списка; null если ни одной. */
+  mid(pose, ...idxs) {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (const i of idxs) {
+      const p = this.vis(pose, i);
+      if (p) {
+        sx += p.x;
+        sy += p.y;
+        n++;
+      }
+    }
+    return n === 0 ? null : { x: sx / n, y: sy / n };
+  }
+};
+
 // web-game/src/battle-camera.ts
 var KEYPOINT_COUNT = 17;
 var MIN_SCORE = 0.3;
@@ -628,9 +910,9 @@ var EDGES = [
   [KP.rightHip, KP.rightKnee],
   [KP.rightKnee, KP.rightAnkle]
 ];
-async function startBattleCamera(video, canvas, detector, onRep3, onStatus) {
+async function startBattleCamera(video, canvas, detector, exercise, onRep3, onStatus) {
   const ctx = canvas.getContext("2d");
-  const repDetector = new RepDetector(DEFAULT_CONFIG);
+  const repDetector = exercise === "squats" ? new SquatDetector(DEFAULT_SQUAT_CONFIG) : new RepDetector(DEFAULT_CONFIG);
   let paused = false;
   let stopped = false;
   onStatus("\u0417\u0430\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E \u043A\u0430\u043C\u0435\u0440\u0443\u2026");
@@ -640,7 +922,7 @@ async function startBattleCamera(video, canvas, detector, onRep3, onStatus) {
   });
   video.srcObject = stream;
   await video.play();
-  onStatus("\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430");
+  onStatus(exercise === "squats" ? "\u0412\u0441\u0442\u0430\u043D\u044C \u0432 \u043F\u043E\u043B\u043D\u044B\u0439 \u0440\u043E\u0441\u0442" : "\u0417\u0430\u0439\u043C\u0438 \u0443\u043F\u043E\u0440 \u043B\u0451\u0436\u0430");
   function draw(pose) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -704,7 +986,7 @@ async function startBattleCamera(video, canvas, detector, onRep3, onStatus) {
 function startWorkout(app3, detector) {
   const found = currentMonster(app3.progression);
   if (!found) return;
-  const monster = found;
+  const monster = monsterForExercise(found, app3.exercise);
   const video = document.getElementById("wk-video");
   const canvas = document.getElementById("wk-overlay");
   const counterEl = document.getElementById("wk-counter");
@@ -796,7 +1078,7 @@ function startWorkout(app3, detector) {
       startRest();
     }
   }
-  startBattleCamera(video, canvas, detector, handleRep, (text) => {
+  startBattleCamera(video, canvas, detector, app3.exercise, handleRep, (text) => {
     statusEl.textContent = text;
   }).then(
     (cam) => {
@@ -1338,7 +1620,7 @@ function runArena(app3, detector) {
   backBtn.onclick = () => endRun();
   renderMobHud();
   startMobTimer();
-  startBattleCamera(video, canvas, detector, handleRep, (text) => {
+  startBattleCamera(video, canvas, detector, "pushups", handleRep, (text) => {
     statusEl.textContent = text;
   }).then(
     (cam) => {
@@ -1390,6 +1672,7 @@ var app2 = {
   progression: loadProgression(),
   totalReps: loadTotalReps(),
   bestArena: loadBestArena(),
+  exercise: "pushups",
   show,
   render() {
     renderMap(this);
