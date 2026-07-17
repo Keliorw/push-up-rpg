@@ -8,7 +8,7 @@ import {
   browserLocalPersistence,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import {auth} from './firebase';
-import {nickToEmail, validateNick} from './nickname';
+import {nickToEmail, normalizeNick, validateNick} from './nickname';
 
 export interface GameUser {
   uid: string;
@@ -26,7 +26,10 @@ export async function register(rawNick: string, password: string): Promise<void>
   if (password.length < PASSWORD_MIN) throw new Error('Пароль: минимум 6 символов');
   try {
     const cred = await createUserWithEmailAndPassword(auth, nickToEmail(rawNick), password);
-    await updateProfile(cred.user, {displayName: rawNick.trim()});
+    // Нормализованный ник: displayName должен побайтово совпадать с ником в
+    // Firestore-доке (правило неизменяемости ника сравнивает строки строго,
+    // и «Nick» ≠ «nick» молча отклоняет ВЕСЬ сейв профиля).
+    await updateProfile(cred.user, {displayName: normalizeNick(rawNick)});
   } catch (e) {
     throw new Error(authErrorText(e));
   }
@@ -53,7 +56,10 @@ export function onUser(cb: (user: GameUser | null) => void): void {
     // displayName может быть ещё не установлен в момент регистрации (гонка с
     // updateProfile), поэтому надёжный фолбэк — ник из технического e-mail,
     // который доступен сразу. Иначе в Firestore уйдёт пустой ник.
-    const nickname = u.displayName || (u.email ? u.email.split('@')[0] : '');
+    // Нормализация обязательна: у старых аккаунтов displayName сохранён как
+    // введён («Nick»), а в доке лежит ник из e-mail («nick») — несовпадение
+    // нарушает правило неизменяемости ника и молча блокирует все сейвы.
+    const nickname = normalizeNick(u.displayName || (u.email ? u.email.split('@')[0] : ''));
     cb({uid: u.uid, nickname});
   });
 }

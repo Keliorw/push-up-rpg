@@ -35,18 +35,24 @@ export async function loadRemote(uid: string): Promise<Profile | null> {
 }
 
 export async function saveRemote(uid: string, profile: Profile, nickname: string): Promise<void> {
-  await setDoc(
-    doc(db, 'users', uid),
-    {
-      nickname,
-      defeatedCount: profile.progression.defeatedCount,
-      lastWorkoutDate: profile.progression.lastWorkoutDate,
-      totalReps: profile.totalReps,
-      bestArena: profile.bestArena,
-      updatedAt: serverTimestamp(),
-    },
-    {merge: true},
-  );
+  const fields = {
+    defeatedCount: profile.progression.defeatedCount,
+    lastWorkoutDate: profile.progression.lastWorkoutDate,
+    totalReps: profile.totalReps,
+    bestArena: profile.bestArena,
+    updatedAt: serverTimestamp(),
+  };
+  try {
+    await setDoc(doc(db, 'users', uid), {nickname, ...fields}, {merge: true});
+  } catch (e: any) {
+    // Ник в доке неизменяем по правилам Firestore. Если сохранённый ник
+    // отличается от присланного (старые аккаунты с гонкой displayName при
+    // регистрации), правило отклоняет ВЕСЬ сейв. Прогресс важнее ника —
+    // повторяем без него: при merge ник в доке остаётся прежним и правило
+    // проходит.
+    if (e?.code !== 'permission-denied') throw e;
+    await setDoc(doc(db, 'users', uid), fields, {merge: true});
+  }
 }
 
 /** Топ игроков по прогрессу кампании; до-сортировку по XP делает вызывающий. */
