@@ -1,3 +1,4 @@
+import {Exercise} from '../../app/src/game/exercise';
 import {
   Progression,
   currentMonster,
@@ -34,6 +35,8 @@ export interface App {
   progression: Progression;
   totalReps: number;
   bestArena: number;
+  /** Выбранное упражнение для боя кампании (переключается на карточке). */
+  exercise: Exercise;
   show(id: ScreenId): void;
   render(): void;
   goCard(): void;
@@ -90,6 +93,7 @@ const app: App = {
   progression: loadProgression(),
   totalReps: loadTotalReps(),
   bestArena: loadBestArena(),
+  exercise: 'pushups',
   show,
   render() {
     renderMap(this);

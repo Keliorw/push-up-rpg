@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>push-up-rpg — калибровка приседаний</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #101828;
+        color: #fff;
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+      }
+      h1 { font-size: 18px; font-weight: 800; margin: 4px 0; text-align: center; }
+      .note { font-size: 13px; color: #9aa4b2; max-width: 680px; text-align: center; }
+      #status { font-size: 14px; color: #F5A623; min-height: 18px; }
+
+      #controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+      #controls button {
+        font: inherit;
+        font-weight: 700;
+        color: #fff;
+        background: #1d2939;
+        border: 1px solid #344054;
+        border-radius: 10px;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      #controls button:hover { background: #263449; }
+
+      #wrap { position: relative; width: 640px; max-width: 100%; }
+
+      /* В режиме камеры сцена зеркалится (селфи); загруженное видео — нет. */
+      #stage { line-height: 0; }
+      #stage.mirrored { transform: scaleX(-1); }
+      #video {
+        width: 100%;
+        display: block;
+        border-radius: 12px;
+        background: #000;
+      }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        pointer-events: none; /* не мешать контролам видео при перемотке */
+      }
+
+      #hud { position: absolute; inset: 0; pointer-events: none; }
+      #counter {
+        position: absolute; top: 8px; left: 0; right: 0;
+        text-align: center; font-size: 64px; line-height: 1; font-weight: 900;
+        color: #F5A623; text-shadow: 0 2px 8px #000;
+      }
+      #hint { position: absolute; top: 84px; left: 0; right: 0; text-align: center; }
+      #hint span {
+        background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 8px; font-size: 16px;
+      }
+      /* Крупная телеметрия — читается с пола во время приседаний. */
+      #debug {
+        font-family: ui-monospace, monospace;
+        font-size: clamp(20px, 3vw, 34px);
+        font-weight: 800;
+        line-height: 1.35;
+        color: #fff;
+        background: #0b111f;
+        padding: 14px 20px;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 95vw;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Калибровка приседаний (тестовая страничка, не боевое приложение)</h1>
+    <p class="note">
+      TensorFlow.js MoveNet + <code>SquatDetector</code> из проекта. Гейт — «стою в
+      полный рост» (торс вертикален). Повтор — по <b>зазору таз↔колени</b> в долях
+      длины торса: стоя ≈ 0.8–1.0, в нижней точке ≈ 0–0.3. Источник: камера или
+      <b>видеофайл</b> (можно перематывать — сигналы считаются и на паузе).
+      Пороги — в <code>app/src/pose/squat-config.ts</code>.
+    </p>
+    <div id="controls">
+      <button id="btn-camera">📷 Камера</button>
+      <button id="btn-file">🎞 Видео-файл</button>
+      <input id="file-input" type="file" accept="video/*" style="display:none" />
+      <button id="btn-reset">⟲ Сброс счёта и диапазонов</button>
+      <button id="btn-log">⬇ Лог сигналов (JSON)</button>
+    </div>
+    <div id="status">Инициализация…</div>
+    <div id="wrap">
+      <div id="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="hud">
+        <div id="counter">0</div>
+        <div id="hint"><span>Выбери источник: камера или видеофайл</span></div>
+      </div>
+    </div>
+    <div id="debug">зазор таз↔колени: —</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script type="module" src="./squat.js"></script>
+  </body>
+</html>

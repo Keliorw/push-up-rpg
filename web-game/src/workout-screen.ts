@@ -1,3 +1,4 @@
+import {monsterForExercise} from '../../app/src/game/exercise';
 import {currentMonster} from '../../app/src/game/progression';
 import {WorkoutState, newWorkout, onRep, totalTarget} from '../../app/src/game/workout';
 import {startBattleCamera, BattleCamera} from './battle-camera';
@@ -6,7 +7,8 @@ import type {App} from './main';
 export function startWorkout(app: App, detector: any): void {
   const found = currentMonster(app.progression);
   if (!found) return;
-  const monster = found;
+  // Цель пересчитана под выбранное упражнение (приседания — ×1.5 повторов).
+  const monster = monsterForExercise(found, app.exercise);
 
   const video = document.getElementById('wk-video') as HTMLVideoElement;
   const canvas = document.getElementById('wk-overlay') as HTMLCanvasElement;
@@ -112,7 +114,7 @@ export function startWorkout(app: App, detector: any): void {
     }
   }
 
-  startBattleCamera(video, canvas, detector, handleRep, text => {
+  startBattleCamera(video, canvas, detector, app.exercise, handleRep, text => {
     statusEl.textContent = text;
   }).then(
     cam => {
