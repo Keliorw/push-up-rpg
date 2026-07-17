@@ -6,10 +6,13 @@ var DEFAULT_SQUAT_CONFIG = {
   minRepDurationMs: 700,
   torsoUprightMinFrac: 0.5,
   gapGateMinFrac: -0.5,
-  gapDownFrac: 0.45,
+  // Калибровка по видео 2026-07-17: настоящие приседания в нижней точке дают
+  // зазор −0.18…0.32, шаги/переминания — ≥0.48. Порог 0.4 разделяет с запасом.
+  gapDownFrac: 0.4,
   gapUpFrac: 0.65,
   gapSmoothing: 0.5,
   maxPlausibleGap: 3,
+  maxKneeSplitFrac: 0.65,
   kneeAngleSmoothing: 0.4,
   descentSmoothing: 0.5,
   baselineRelaxAlpha: 0.01,
@@ -67,6 +70,11 @@ var SquatDetector = class {
   lastGoodMs = Number.NEGATIVE_INFINITY;
   smoothedGap = null;
   smoothedKnee = null;
+  smoothedSplit = null;
+  // Счётчики валидных кадров фазы «вниз»: разброс колен выше/не выше порога.
+  // По большинству на выходе из «вниз» повтор либо присед, либо выпад.
+  downSplitHigh = 0;
+  downSplitLow = 0;
   smoothedDescent = 0;
   baselineTopY = null;
   debug = {
@@ -74,6 +82,7 @@ var SquatDetector = class {
     gap: null,
     torsoUprightFrac: null,
     kneeAngle: null,
+    kneeSplit: null,
     hipDescent: null,
     phase: "up",
     visibleKeypoints: 0,
@@ -100,6 +109,8 @@ var SquatDetector = class {
     const gap = this.updateGap(rawGap);
     this.debug.gap = gap;
     this.debug.kneeAngle = this.updateKnee(pose);
+    const split = this.updateSplit(pose, torsoLen);
+    this.debug.kneeSplit = split;
     this.debug.hipDescent = this.updateDescent(hip, torsoLen);
     switch (this.state) {
       case "noPosition":
@@ -119,13 +130,23 @@ var SquatDetector = class {
         if (gap <= this.cfg.gapDownFrac) {
           this.state = "down";
           this.debug.phase = "down";
+          this.downSplitHigh = 0;
+          this.downSplitLow = 0;
         }
         return [];
       case "down":
+        if (split !== null) {
+          if (split > this.cfg.maxKneeSplitFrac) {
+            this.downSplitHigh++;
+          } else {
+            this.downSplitLow++;
+          }
+        }
         if (gap >= this.cfg.gapUpFrac) {
           this.state = "up";
           this.debug.phase = "up";
-          if (tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
+          const isLunge = this.downSplitHigh > this.downSplitLow;
+          if (!isLunge && tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
             this.lastRepMs = tMs;
             return ["repCounted"];
           }
@@ -136,6 +157,18 @@ var SquatDetector = class {
   updateGap(raw) {
     this.smoothedGap = this.smoothedGap === null ? raw : this.cfg.gapSmoothing * raw + (1 - this.cfg.gapSmoothing) * this.smoothedGap;
     return this.smoothedGap;
+  }
+  /** Сглаженный разброс колен по высоте; null если видно меньше двух колен. */
+  updateSplit(pose, torsoLen) {
+    const l = this.vis(pose, KP.leftKnee);
+    const r = this.vis(pose, KP.rightKnee);
+    if (!l || !r || torsoLen < 1e-6) {
+      this.smoothedSplit = null;
+      return null;
+    }
+    const raw = Math.abs(l.y - r.y) / torsoLen;
+    this.smoothedSplit = this.smoothedSplit === null ? raw : this.cfg.gapSmoothing * raw + (1 - this.cfg.gapSmoothing) * this.smoothedSplit;
+    return this.smoothedSplit;
   }
   /** Сглаженный средний угол колена по ногам с видимой лодыжкой. */
   updateKnee(pose) {
@@ -214,12 +247,14 @@ var SquatDetector = class {
     this.state = "noPosition";
     this.smoothedGap = null;
     this.smoothedKnee = null;
+    this.smoothedSplit = null;
     this.smoothedDescent = 0;
     this.baselineTopY = null;
     this.debug.inPosition = false;
     this.debug.phase = "up";
     this.debug.gap = null;
     this.debug.kneeAngle = null;
+    this.debug.kneeSplit = null;
     this.debug.hipDescent = null;
     return wasAcquired ? ["positionLost"] : [];
   }
@@ -343,6 +378,7 @@ function fmt(n, digits = 0, suffix = "") {
 var ranges = {
   gap: { min: Infinity, max: -Infinity },
   knee: { min: Infinity, max: -Infinity },
+  split: { min: Infinity, max: -Infinity },
   descent: { min: Infinity, max: -Infinity },
   upright: { min: Infinity, max: -Infinity }
 };
@@ -368,6 +404,18 @@ function resetAll() {
   }
 }
 btnReset.onclick = resetAll;
+window.__squat = {
+  get log() {
+    return signalLog;
+  },
+  get ranges() {
+    return ranges;
+  },
+  get reps() {
+    return reps;
+  },
+  resetAll
+};
 btnLog.onclick = () => {
   const blob = new Blob(
     [JSON.stringify({ config: DEFAULT_SQUAT_CONFIG, samples: signalLog })],
@@ -455,6 +503,7 @@ async function main() {
     const dbg = detectorLogic.debug;
     track("gap", dbg.gap);
     track("knee", dbg.kneeAngle);
+    track("split", dbg.kneeSplit);
     track("descent", dbg.hipDescent);
     track("upright", dbg.torsoUprightFrac);
     if (pose && tMs !== lastLoggedT && signalLog.length < MAX_LOG) {
@@ -464,6 +513,7 @@ async function main() {
         gap: dbg.gap,
         upright: dbg.torsoUprightFrac,
         knee: dbg.kneeAngle,
+        split: dbg.kneeSplit,
         descent: dbg.hipDescent,
         phase: dbg.phase,
         inPosition: dbg.inPosition,
@@ -472,7 +522,7 @@ async function main() {
     }
     const cfg = DEFAULT_SQUAT_CONFIG;
     const posColor = dbg.inPosition ? "#5ad469" : "#ff6b6b";
-    debugEl.innerHTML = '<div>\u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u0442\u043E\u0447\u0435\u043A: <b>" + dbg.visibleKeypoints + "/17</b> &nbsp; \u0444\u043E\u0440\u043C\u0430\u0442 \u0442\u0435\u043B\u0430: <b>" + fmt(dbg.bodyAspect, 1) + "</b></div><div>\u0437\u0430\u0437\u043E\u0440 \u0442\u0430\u0437\u2194\u043A\u043E\u043B\u0435\u043D\u0438: <b>" + fmt(dbg.gap, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.gap, 2) + "</b> &nbsp; (\u0432\u043D\u0438\u0437&le;" + cfg.gapDownFrac + " \u0432\u0432\u0435\u0440\u0445&ge;" + cfg.gapUpFrac + ")</div><div>\u0432\u0435\u0440\u0442\u0438\u043A\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0442\u043E\u0440\u0441\u0430: <b>" + fmt(dbg.torsoUprightFrac, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.upright, 2) + "</b> &nbsp; (\u0433\u0435\u0439\u0442&ge;" + cfg.torsoUprightMinFrac + ")</div><div>\u0443\u0433\u043E\u043B \u043A\u043E\u043B\u0435\u043D\u0430: <b>" + fmt(dbg.kneeAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.knee, 0) + "\xB0</b> &nbsp; \u043F\u0440\u043E\u0441\u0430\u0434\u043A\u0430 \u0442\u0430\u0437\u0430: <b>" + fmt(dbg.hipDescent, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.descent, 2) + '</b></div><div style="opacity:.6;font-size:.7em">\u043F\u043E\u0432\u0442\u043E\u0440\u043E\u0432: ' + reps + " \xB7 \u043B\u043E\u0433: " + signalLog.length + " \u043A\u0430\u0434\u0440\u043E\u0432</div>";
+    debugEl.innerHTML = '<div>\u0432 \u043F\u043E\u0437\u0438\u0446\u0438\u0438: <b style="color:' + posColor + '">' + (dbg.inPosition ? "\u0414\u0410" : "\u041D\u0415\u0422") + "</b> &nbsp; \u0444\u0430\u0437\u0430: <b>" + dbg.phase + "</b> &nbsp; \u0442\u043E\u0447\u0435\u043A: <b>" + dbg.visibleKeypoints + "/17</b> &nbsp; \u0444\u043E\u0440\u043C\u0430\u0442 \u0442\u0435\u043B\u0430: <b>" + fmt(dbg.bodyAspect, 1) + "</b></div><div>\u0437\u0430\u0437\u043E\u0440 \u0442\u0430\u0437\u2194\u043A\u043E\u043B\u0435\u043D\u0438: <b>" + fmt(dbg.gap, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.gap, 2) + "</b> &nbsp; (\u0432\u043D\u0438\u0437&le;" + cfg.gapDownFrac + " \u0432\u0432\u0435\u0440\u0445&ge;" + cfg.gapUpFrac + ")</div><div>\u0432\u0435\u0440\u0442\u0438\u043A\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0442\u043E\u0440\u0441\u0430: <b>" + fmt(dbg.torsoUprightFrac, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.upright, 2) + "</b> &nbsp; (\u0433\u0435\u0439\u0442&ge;" + cfg.torsoUprightMinFrac + ")</div><div>\u0440\u0430\u0437\u0431\u0440\u043E\u0441 \u043A\u043E\u043B\u0435\u043D: <b>" + fmt(dbg.kneeSplit, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.split, 2) + "</b> &nbsp; (\u0432\u044B\u043F\u0430\u0434&gt;" + cfg.maxKneeSplitFrac + " \u2014 \u043D\u0435 \u043F\u0440\u0438\u0441\u0435\u0434)</div><div>\u0443\u0433\u043E\u043B \u043A\u043E\u043B\u0435\u043D\u0430: <b>" + fmt(dbg.kneeAngle, 0, "\xB0") + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.knee, 0) + "\xB0</b> &nbsp; \u043F\u0440\u043E\u0441\u0430\u0434\u043A\u0430 \u0442\u0430\u0437\u0430: <b>" + fmt(dbg.hipDescent, 2) + "</b> &nbsp; \u0434\u0438\u0430\u043F\u0430\u0437\u043E\u043D: <b>" + rangeStr(ranges.descent, 2) + '</b></div><div style="opacity:.6;font-size:.7em">\u043F\u043E\u0432\u0442\u043E\u0440\u043E\u0432: ' + reps + " \xB7 \u043B\u043E\u0433: " + signalLog.length + " \u043A\u0430\u0434\u0440\u043E\u0432</div>";
     requestAnimationFrame(loop);
   }
   loop();

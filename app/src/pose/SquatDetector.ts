@@ -14,6 +14,11 @@ export interface SquatDebug {
   torsoUprightFrac: number | null;
   /** Сглаженный средний угол колена (бедро–колено–лодыжка); null без лодыжек. */
   kneeAngle: number | null;
+  /**
+   * Сглаженный разброс колен по высоте в долях торса. В приседе ≈ 0,
+   * в выпаде заднее колено у пола — разброс большой (повтор не считается).
+   */
+  kneeSplit: number | null;
   /** Сглаженная просадка таза от верхней базовой линии, в долях торса. */
   hipDescent: number | null;
   phase: SquatPhase;
@@ -51,6 +56,11 @@ export class SquatDetector {
 
   private smoothedGap: number | null = null;
   private smoothedKnee: number | null = null;
+  private smoothedSplit: number | null = null;
+  // Счётчики валидных кадров фазы «вниз»: разброс колен выше/не выше порога.
+  // По большинству на выходе из «вниз» повтор либо присед, либо выпад.
+  private downSplitHigh = 0;
+  private downSplitLow = 0;
   private smoothedDescent = 0;
   private baselineTopY: number | null = null;
 
@@ -59,6 +69,7 @@ export class SquatDetector {
     gap: null,
     torsoUprightFrac: null,
     kneeAngle: null,
+    kneeSplit: null,
     hipDescent: null,
     phase: 'up',
     visibleKeypoints: 0,
@@ -109,6 +120,8 @@ export class SquatDetector {
     const gap = this.updateGap(rawGap!);
     this.debug.gap = gap;
     this.debug.kneeAngle = this.updateKnee(pose);
+    const split = this.updateSplit(pose, torsoLen);
+    this.debug.kneeSplit = split;
     this.debug.hipDescent = this.updateDescent(hip!, torsoLen);
 
     switch (this.state) {
@@ -129,13 +142,26 @@ export class SquatDetector {
         if (gap <= this.cfg.gapDownFrac) {
           this.state = 'down';
           this.debug.phase = 'down';
+          this.downSplitHigh = 0;
+          this.downSplitLow = 0;
         }
         return [];
       case 'down':
+        if (split !== null) {
+          if (split > this.cfg.maxKneeSplitFrac) {
+            this.downSplitHigh++;
+          } else {
+            this.downSplitLow++;
+          }
+        }
         if (gap >= this.cfg.gapUpFrac) {
           this.state = 'up';
           this.debug.phase = 'up';
-          if (tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
+          // Выпад, а не присед: колени были разъехавшимися по высоте
+          // большинство фазы «вниз» (заднее колено у пола утягивает
+          // середину колен вниз, и зазор проваливается без приседа).
+          const isLunge = this.downSplitHigh > this.downSplitLow;
+          if (!isLunge && tMs - this.lastRepMs >= this.cfg.minRepDurationMs) {
             this.lastRepMs = tMs;
             return ['repCounted'];
           }
@@ -151,6 +177,23 @@ export class SquatDetector {
         : this.cfg.gapSmoothing * raw +
           (1 - this.cfg.gapSmoothing) * this.smoothedGap;
     return this.smoothedGap;
+  }
+
+  /** Сглаженный разброс колен по высоте; null если видно меньше двух колен. */
+  private updateSplit(pose: Pose, torsoLen: number): number | null {
+    const l = this.vis(pose, KP.leftKnee);
+    const r = this.vis(pose, KP.rightKnee);
+    if (!l || !r || torsoLen < 1e-6) {
+      this.smoothedSplit = null;
+      return null;
+    }
+    const raw = Math.abs(l.y - r.y) / torsoLen;
+    this.smoothedSplit =
+      this.smoothedSplit === null
+        ? raw
+        : this.cfg.gapSmoothing * raw +
+          (1 - this.cfg.gapSmoothing) * this.smoothedSplit;
+    return this.smoothedSplit;
   }
 
   /** Сглаженный средний угол колена по ногам с видимой лодыжкой. */
@@ -240,12 +283,14 @@ export class SquatDetector {
     this.state = 'noPosition';
     this.smoothedGap = null;
     this.smoothedKnee = null;
+    this.smoothedSplit = null;
     this.smoothedDescent = 0;
     this.baselineTopY = null;
     this.debug.inPosition = false;
     this.debug.phase = 'up';
     this.debug.gap = null;
     this.debug.kneeAngle = null;
+    this.debug.kneeSplit = null;
     this.debug.hipDescent = null;
     return wasAcquired ? ['positionLost'] : [];
   }

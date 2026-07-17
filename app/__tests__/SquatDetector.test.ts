@@ -142,6 +142,36 @@ describe('SquatDetector: счёт повторов', () => {
     expect(d.process(squatPose(STAND, {scale: 1.6}), t + 1200)).toEqual([]);
   });
 
+  it('ВЫПАД не считается приседом (колени разъехались по высоте)', () => {
+    const d = new SquatDetector(CFG);
+    const t = acquire(d);
+    // Выпад: таз опустился (зазор до середины колен мал), но заднее колено
+    // у пола — разброс колен 0.24/0.3 = 0.8 торса, выше порога всю фазу.
+    const lunge = squatPose(BOTTOM);
+    lunge[KP.leftKnee] = {x: 0.45, y: 0.63, score: 0.9};
+    lunge[KP.rightKnee] = {x: 0.55, y: 0.87, score: 0.9};
+    d.process(lunge, t + 400);
+    d.process(lunge, t + 600);
+    d.process(lunge, t + 800);
+    expect(d.debug.phase).toBe('down');
+    expect(d.process(squatPose(STAND), t + 1200)).toEqual([]);
+    expect(d.debug.phase).toBe('up');
+  });
+
+  it('шумовой выброс разброса колен НЕ отменяет настоящий присед', () => {
+    const d = new SquatDetector(CFG);
+    const t = acquire(d);
+    // Нижняя точка: большинство кадров колени ровно, один кадр — выброс.
+    const noisy = squatPose(BOTTOM);
+    noisy[KP.leftKnee] = {x: 0.45, y: 0.63, score: 0.9};
+    noisy[KP.rightKnee] = {x: 0.55, y: 0.87, score: 0.9};
+    d.process(squatPose(BOTTOM), t + 400);
+    d.process(noisy, t + 500);
+    d.process(squatPose(BOTTOM), t + 600);
+    d.process(squatPose(BOTTOM), t + 700);
+    expect(d.process(squatPose(STAND), t + 1200)).toEqual(['repCounted']);
+  });
+
   it('дребезг быстрее minRepDurationMs не даёт второго повтора', () => {
     const d = new SquatDetector(CFG);
     const t = acquire(d);

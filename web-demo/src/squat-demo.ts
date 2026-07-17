@@ -125,9 +125,10 @@ interface Range {
   min: number;
   max: number;
 }
-const ranges: Record<'gap' | 'knee' | 'descent' | 'upright', Range> = {
+const ranges: Record<'gap' | 'knee' | 'split' | 'descent' | 'upright', Range> = {
   gap: {min: Infinity, max: -Infinity},
   knee: {min: Infinity, max: -Infinity},
+  split: {min: Infinity, max: -Infinity},
   descent: {min: Infinity, max: -Infinity},
   upright: {min: Infinity, max: -Infinity},
 };
@@ -147,6 +148,7 @@ interface LogSample {
   gap: number | null;
   upright: number | null;
   knee: number | null;
+  split: number | null;
   descent: number | null;
   phase: string;
   inPosition: boolean;
@@ -167,6 +169,20 @@ function resetAll() {
 }
 
 btnReset.onclick = resetAll;
+
+// Отладочный доступ из консоли/DevTools при калибровке порогов.
+(window as any).__squat = {
+  get log() {
+    return signalLog;
+  },
+  get ranges() {
+    return ranges;
+  },
+  get reps() {
+    return reps;
+  },
+  resetAll,
+};
 
 btnLog.onclick = () => {
   const blob = new Blob(
@@ -263,6 +279,7 @@ async function main() {
     const dbg = detectorLogic.debug;
     track('gap', dbg.gap);
     track('knee', dbg.kneeAngle);
+    track('split', dbg.kneeSplit);
     track('descent', dbg.hipDescent);
     track('upright', dbg.torsoUprightFrac);
     if (pose && tMs !== lastLoggedT && signalLog.length < MAX_LOG) {
@@ -272,6 +289,7 @@ async function main() {
         gap: dbg.gap,
         upright: dbg.torsoUprightFrac,
         knee: dbg.kneeAngle,
+        split: dbg.kneeSplit,
         descent: dbg.hipDescent,
         phase: dbg.phase,
         inPosition: dbg.inPosition,
@@ -293,6 +311,9 @@ async function main() {
       '<div>вертикальность торса: <b>' + fmt(dbg.torsoUprightFrac, 2) + '</b>' +
       ' &nbsp; диапазон: <b>' + rangeStr(ranges.upright, 2) + '</b>' +
       ' &nbsp; (гейт&ge;' + cfg.torsoUprightMinFrac + ')</div>' +
+      '<div>разброс колен: <b>' + fmt(dbg.kneeSplit, 2) + '</b>' +
+      ' &nbsp; диапазон: <b>' + rangeStr(ranges.split, 2) + '</b>' +
+      ' &nbsp; (выпад&gt;' + cfg.maxKneeSplitFrac + ' — не присед)</div>' +
       '<div>угол колена: <b>' + fmt(dbg.kneeAngle, 0, '°') + '</b>' +
       ' &nbsp; диапазон: <b>' + rangeStr(ranges.knee, 0) + '°</b>' +
       ' &nbsp; просадка таза: <b>' + fmt(dbg.hipDescent, 2) + '</b>' +
