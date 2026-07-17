@@ -1145,7 +1145,7 @@ async function register(rawNick, password) {
   if (password.length < PASSWORD_MIN) throw new Error("\u041F\u0430\u0440\u043E\u043B\u044C: \u043C\u0438\u043D\u0438\u043C\u0443\u043C 6 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
   try {
     const cred = await createUserWithEmailAndPassword(auth, nickToEmail(rawNick), password);
-    await updateProfile(cred.user, { displayName: rawNick.trim() });
+    await updateProfile(cred.user, { displayName: normalizeNick(rawNick) });
   } catch (e) {
     throw new Error(authErrorText(e));
   }
@@ -1166,7 +1166,7 @@ function onUser(cb) {
       cb(null);
       return;
     }
-    const nickname = u.displayName || (u.email ? u.email.split("@")[0] : "");
+    const nickname = normalizeNick(u.displayName || (u.email ? u.email.split("@")[0] : ""));
     cb({ uid: u.uid, nickname });
   });
 }
@@ -1215,18 +1215,19 @@ async function loadRemote(uid) {
   };
 }
 async function saveRemote(uid, profile, nickname) {
-  await setDoc(
-    doc(db, "users", uid),
-    {
-      nickname,
-      defeatedCount: profile.progression.defeatedCount,
-      lastWorkoutDate: profile.progression.lastWorkoutDate,
-      totalReps: profile.totalReps,
-      bestArena: profile.bestArena,
-      updatedAt: serverTimestamp()
-    },
-    { merge: true }
-  );
+  const fields = {
+    defeatedCount: profile.progression.defeatedCount,
+    lastWorkoutDate: profile.progression.lastWorkoutDate,
+    totalReps: profile.totalReps,
+    bestArena: profile.bestArena,
+    updatedAt: serverTimestamp()
+  };
+  try {
+    await setDoc(doc(db, "users", uid), { nickname, ...fields }, { merge: true });
+  } catch (e) {
+    if (e?.code !== "permission-denied") throw e;
+    await setDoc(doc(db, "users", uid), fields, { merge: true });
+  }
 }
 async function loadLeaderboard(max) {
   const q = query(collection(db, "users"), orderBy("defeatedCount", "desc"), limit(max));
